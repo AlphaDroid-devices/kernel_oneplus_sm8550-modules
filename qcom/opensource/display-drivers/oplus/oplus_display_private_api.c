@@ -2624,7 +2624,7 @@ static OPLUS_ATTR(ffc_mode, S_IRUGO|S_IWUSR, oplus_get_ffc_mode_debug,
 		oplus_set_ffc_mode_debug);
 #ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
 static OPLUS_ATTR(fp_type, S_IRUGO | S_IWUSR, oplus_ofp_get_fp_type_attr, oplus_ofp_set_fp_type_attr);
-static OPLUS_ATTR(hbm, S_IRUGO | S_IWUSR, oplus_ofp_get_hbm_attr, oplus_ofp_set_hbm_attr);
+static OPLUS_ATTR(hbm, S_IRUGO | S_IWUSR, oplus_ofp_get_hbm_attr, NULL);
 static OPLUS_ATTR(aor, S_IRUGO | S_IWUSR, oplus_ofp_get_aor_attr, oplus_ofp_set_aor_attr);
 static OPLUS_ATTR(dimlayer_hbm, S_IRUGO | S_IWUSR, oplus_ofp_get_dimlayer_hbm_attr, oplus_ofp_set_dimlayer_hbm_attr);
 static OPLUS_ATTR(notify_fppress, S_IRUGO | S_IWUSR, NULL, oplus_ofp_notify_fp_press_attr);
