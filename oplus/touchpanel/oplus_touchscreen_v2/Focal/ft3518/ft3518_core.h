@@ -66,10 +66,8 @@
 #define FTS_REG_SAMSUNG_SPECIFAL                0xFA
 #define FTS_REG_HEALTH_1                        0xFD
 #define FTS_REG_HEALTH_2                        0xFE
-#define FTS_REG_GLOVE_MODE_SWITCH               0xC0
-#define FTS_REG_GLOVE_MODE_STATE                0x01
-#define FTS_REG_TEMPERATURE                     0x97
 #define FTS_REG_DIAPHRAGM_EN                    0xC3
+
 
 #define FTS_MAX_POINTS_SUPPORT                  10
 #define FTS_MAX_ID                              0x0A
@@ -136,10 +134,15 @@
 
 #define FTS_120HZ_REPORT_RATE                   0x0C
 #define FTS_180HZ_REPORT_RATE                   0x12
+#define FTS_240HZ_REPORT_RATE                   0x24
+#define FTS_360HZ_REPORT_RATE                   0x24
+#define FTS_720HZ_REPORT_RATE                   0x24
 
 #define FTS_WRITE_RATE_120                      120
 #define FTS_WRITE_RATE_180                      180
 #define FTS_WRITE_RATE_240                      240
+#define FTS_WRITE_RATE_360                      360
+#define FTS_WRITE_RATE_720                      720
 
 #define GET_LEN_BY_WIDTH_MAJOR(width_major, len)\
 ({\
@@ -239,7 +242,7 @@ struct chip_data_ft3518 {
 	int *panel_differ_raw;
 	int *rawdata_linearity;
 	int tp_index;
-	int tp_temperature;
+
 	char *test_limit_name;
 	char *fw_name;
 
@@ -257,7 +260,6 @@ struct chip_data_ft3518 {
 	struct monitor_data *monitor_data;
 	struct resolution_info *chip_resolution_info;
 	int gesture_state;
-	int glove_mode_flag;
 	bool black_gesture_indep;
 	bool high_resolution_support;
 	bool high_resolution_support_x8;

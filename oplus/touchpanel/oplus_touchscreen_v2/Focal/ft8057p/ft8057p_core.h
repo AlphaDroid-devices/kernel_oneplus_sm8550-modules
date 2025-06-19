@@ -345,4 +345,3 @@ int fts_reset_proc(int hdelayms);
 
 
 #endif /*__ft8057p_CORE_H__*/
-

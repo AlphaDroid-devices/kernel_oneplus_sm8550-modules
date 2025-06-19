@@ -133,7 +133,6 @@ int goodix_spi_read(struct chip_data_brl *chip_info, unsigned int addr,
 	u8 *tx_buf = NULL;
 	struct spi_transfer xfers;
 	struct spi_message spi_msg;
-	int ret_err = -1;
 	int ret = 0;
 
 	rx_buf = kzalloc(SPI_READ_PREFIX_LEN + len, GFP_KERNEL);
@@ -175,13 +174,6 @@ int goodix_spi_read(struct chip_data_brl *chip_info, unsigned int addr,
 	memcpy(data, &rx_buf[SPI_READ_PREFIX_LEN], len);
 
 exit:
-	if (chip_info->monitor_data && chip_info->monitor_data->health_monitor_support
-			   && (ret < 0 || CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS))) {
-		chip_info->monitor_data->bus_buf = tx_buf;
-		chip_info->monitor_data->bus_len = SPI_READ_PREFIX_LEN;
-		tp_healthinfo_report(chip_info->monitor_data, HEALTH_BUS,
-			   CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS) ? &ret_err : &ret);
-	}
 	kfree(tx_buf);
 err_tx_buf_alloc:
 	kfree(rx_buf);
@@ -196,7 +188,6 @@ int goodix_spi_write(struct chip_data_brl *chip_info, unsigned int addr,
 	u8 *tx_buf = NULL;
 	struct spi_transfer xfers;
 	struct spi_message spi_msg;
-	int ret_err = -1;
 	int ret = 0;
 
 	tx_buf = kzalloc(SPI_WRITE_PREFIX_LEN + len, GFP_KERNEL);
@@ -224,13 +215,6 @@ int goodix_spi_write(struct chip_data_brl *chip_info, unsigned int addr,
 		TPD_INFO("GT:spi transfer error:%d\n", ret);
 	}
 
-	if (chip_info->monitor_data && chip_info->monitor_data->health_monitor_support
-			   && (ret < 0 || CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS))) {
-		chip_info->monitor_data->bus_buf = tx_buf;
-		chip_info->monitor_data->bus_len = SPI_WRITE_PREFIX_LEN;
-		tp_healthinfo_report(chip_info->monitor_data, HEALTH_BUS,
-			   CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS) ? &ret_err : &ret);
-	}
 	kfree(tx_buf);
 	return ret;
 }
@@ -2319,23 +2303,15 @@ static fw_update_state goodix_fw_update(void *chip_data,
 
 	r = goodix_get_cfg_parms(chip_data, cfg_fw_firmware);
 	if (r < 0) {
-		tp_healthinfo_report(chip_info->monitor_data, HEALTH_FW_UPDATE, "goodix_get_cfg_parms fail");
 		TPD_INFO("GT:%s Failed get cfg from firmware\n", __func__);
 	} else {
 		TPD_INFO("GT:%s success get ic cfg from firmware\n", __func__);
 	}
 
 	r = goodix_get_fw_parms(chip_data, cfg_fw_firmware, &fw_firmware);
-	if (r < 0 || (chip_info->monitor_data
-			&& CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
-		if (chip_info->monitor_data) {
-			tp_healthinfo_report(chip_info->monitor_data, HEALTH_FW_UPDATE, "goodix_get_fw_parms fail");
-		}
+	if (r < 0) {
 		TPD_INFO("GT:%s Failed get ic fw from firmware\n", __func__);
-		if (!chip_info->monitor_data || !CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
-			r = FW_UPDATE_ERROR;
-			goto err_parse_fw;
-		}
+		goto err_parse_fw;
 	} else {
 		TPD_INFO("GT:%s success get ic fw from firmware\n", __func__);
 	}
@@ -2343,15 +2319,8 @@ static fw_update_state goodix_fw_update(void *chip_data,
 	fwu_ctrl->fw_data.firmware = &fw_firmware;
 	fwu_ctrl->ic_config = &fwu_ctrl->chip_info->normal_cfg;
 	r = goodix_parse_firmware(&fwu_ctrl->fw_data);
-	if (r < 0 || (chip_info->monitor_data
-			&& CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
-		if (chip_info->monitor_data) {
-			tp_healthinfo_report(chip_info->monitor_data, HEALTH_FW_UPDATE, "goodix_parse_firmware fail");
-		}
-		if (!chip_info->monitor_data || !CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
-			r = FW_UPDATE_ERROR;
-			goto err_parse_fw;
-		}
+	if (r < 0) {
+		goto err_parse_fw;
 	}
 
 	/* TODO: set force update flag*/
@@ -2372,16 +2341,10 @@ start_update:
 				 FW_UPDATE_RETRY - retry0);
 		}
 	} while (ret && --retry0 > 0);
-	if (ret || (chip_info->monitor_data
-			&& CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
-		if (chip_info->monitor_data) {
-			tp_healthinfo_report(chip_info->monitor_data, HEALTH_FW_UPDATE, "goodix_update_prepare fail");
-		}
+	if (ret) {
 		TPD_INFO("GT:%s: Failed to prepare ISP, exit update:%d\n",
 			 __func__, ret);
-		if (!chip_info->monitor_data || !CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
-			goto err_fw_prepare;
-		}
+		goto err_fw_prepare;
 	}
 
 	/* progress: 20%~100% */
@@ -2391,11 +2354,7 @@ start_update:
 			 FW_UPDATE_RETRY - retry1);
 		goto start_update;
 	}
-	if (ret || (chip_info->monitor_data
-			&& CHK_BIT_NUM(chip_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
-		if (chip_info->ts) {
-			tp_healthinfo_report(chip_info->monitor_data, HEALTH_FW_UPDATE, "goodix_flash_firmware fail");
-		}
+	if (ret) {
 		TPD_INFO("GT:flash fw data enter error\n");
 	} else {
 		TPD_INFO("GT:flash fw data success, need check version\n");
@@ -2407,7 +2366,6 @@ err_fw_prepare:
 		TPD_INFO("GT:Firmware update successfully\n");
 		r = FW_UPDATE_SUCCESS;
 	} else {
-		tp_healthinfo_report(chip_info->monitor_data, HEALTH_FW_UPDATE, "goodix_update_finish fail");
 		TPD_INFO("GT:%s: Firmware update failed\n", __func__);
 		r = FW_UPDATE_ERROR;
 	}
@@ -2963,10 +2921,8 @@ static void goodix_get_health_info(void *chip_data, struct monitor_data *mon_dat
 
 	health_info = &health_data;
 
-	if (health_info->shield_water
-			|| CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-		if (health_info->shield_water_state
-				|| CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	if (health_info->shield_water) {
+		if (health_info->shield_water_state) {
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_SHIELD_WATER);
 			TPD_DETAIL("%s: enter water mode\n", __func__);
 		} else {
@@ -2974,56 +2930,31 @@ static void goodix_get_health_info(void *chip_data, struct monitor_data *mon_dat
 		}
 	}
 
-	if (health_info->baseline_refresh
-				|| CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-		if (CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-			health_info->baseline_refresh_type = SIMULATE_DEBUG_INFO;
-		}
+	if (health_info->baseline_refresh) {
 		switch (health_info->baseline_refresh_type) {
-		case SIMULATE_DEBUG_INFO:
-			TPD_INFO("Simulating Debug Info\n");
-			fallthrough;
 		case BASE_DC_COMPONENT:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "BASE_DC_COMPONENT");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-				break;
-			}
-			fallthrough;
+			break;
 
 		case BASE_SYS_UPDATE:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "BASE_SYS_UPDATE");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-				break;
-			}
-			fallthrough;
+			break;
 
 		case BASE_NEGATIVE_FINGER:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_negative_finger");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-				break;
-			}
-			fallthrough;
+			break;
 
 		case BASE_MONITOR_UPDATE:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "BASE_MONITOR_UPDATE");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-				break;
-			}
-			fallthrough;
+			break;
 
 		case BASE_CONSISTENCE:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "BASE_CONSISTENCE");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-				break;
-			}
-			fallthrough;
+			break;
 
 		case BASE_FORCE_UPDATE:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "BASE_FORCE_UPDATE");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-				break;
-			}
-			fallthrough;
+			break;
 
 		default:
 			break;
@@ -3033,8 +2964,7 @@ static void goodix_get_health_info(void *chip_data, struct monitor_data *mon_dat
 			   health_info->baseline_refresh_type);
 	}
 
-	if (health_info->shield_freq != 0
-			|| CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	if (health_info->shield_freq != 0) {
 		if (health_info->charger_mode) {
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_NOISE_CHARGE);
 		} else {
@@ -3080,9 +3010,8 @@ static void goodix_get_health_info(void *chip_data, struct monitor_data *mon_dat
 		TPD_DETAIL("%s: fw reset type : %d\n", __func__, health_info->esd_reason);
 	}
 
-	if ((health_info->shield_palm != 0
-		   && health_info->shield_palm != health_local->shield_palm)
-		   || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	if (health_info->shield_palm != 0
+		   && health_info->shield_palm != health_local->shield_palm) {
 		tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_SHIELD_PALM);
 		TPD_DETAIL("%s: enter palm mode\n", __func__);
 	}
@@ -3092,16 +3021,14 @@ static void goodix_get_health_info(void *chip_data, struct monitor_data *mon_dat
 		TPD_DETAIL("%s: enter charger mode\n", __func__);
 	}
 
-	if ((health_info->low_temperature != 0
-		   && health_info->low_temperature != health_local->low_temperature)
-		   || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	if (health_info->low_temperature != 0
+		   && health_info->low_temperature != health_local->low_temperature) {
 		tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_TEMP_DRIFT);
 		TPD_DETAIL("%s: enter low temperature\n", __func__);
 	}
 
-	if ((health_info->broken_compensated != 0
-		   && health_info->broken_compensated != health_local->broken_compensated)
-		   || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	if (health_info->broken_compensated != 0
+		   && health_info->broken_compensated != health_local->broken_compensated) {
 		tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_CHANEL_FILL);
 		TPD_DETAIL("%s: broken compensated occurred\n", __func__);
 	}
@@ -5712,30 +5639,10 @@ static int goodix_gt9966_ts_probe(struct spi_device *spi)
 	ts->irq = spi->irq;
 	ts->chip_data = chip_info;
 	spi_set_drvdata(spi, ts);
-
-	/* tp_index*/
-	ret = of_property_read_u32(ts->dev->of_node, "touchpanel,tp-index", &ts->tp_index);
-
-	if (ret) {
-		TPD_BOOT_INFO("ts->tp_index not specified\n");
-		ts->tp_index = 0;
-	} else {
-		if (ts->tp_index >= TP_SUPPORT_MAX) {
-			TP_INFO(ts->tp_index, "ts->tp_index is big than %d\n", TP_SUPPORT_MAX);
-			ts->tp_index = 0;
-		}
-	}
-	TPD_INFO("ts->tp_index is %d\n", ts->tp_index);
-
 	/* add input_dev info */
 	ts->id.bustype = BUS_SPI;
 	ts->id.vendor = GOODIX;
-
-	if (!ts->tp_index) {
-		ts->id.product = GT9966;
-	} else {
-		ts->id.product = GT9966_SECOND;
-	}
+	ts->id.product = GT9966;
 
 	chip_info->hw_res = &ts->hw_res;
 	chip_info->s_client = spi;
@@ -5761,7 +5668,6 @@ static int goodix_gt9966_ts_probe(struct spi_device *spi)
 	/* 9. create goodix tool node */
 	gtx8_init_tool_node(ts, &chip_info->rawdiff_mode);
 
-	chip_info->monitor_data = &ts->monitor_data;
 	chip_info->kernel_grip_support = ts->kernel_grip_support;
 	chip_info->tp_index = ts->tp_index;
 

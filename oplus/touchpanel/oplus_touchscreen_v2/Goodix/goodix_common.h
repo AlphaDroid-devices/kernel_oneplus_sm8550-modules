@@ -61,7 +61,6 @@ struct fw_update_info {
 	struct fw_info  *firmware;
 };
 
-#define SIMULATE_DEBUG_INFO 0xff
 typedef enum {
 	BASE_DC_COMPONENT = 0X01,
 	BASE_SYS_UPDATE = 0X02,

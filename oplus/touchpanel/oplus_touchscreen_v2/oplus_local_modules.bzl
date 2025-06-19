@@ -63,22 +63,6 @@ def define_oplus_local_modules():
         includes = ["."],
 #        local_defines = ["CONFIG_REMOVE_OPLUS_FUNCTION"],
     )
-
-    define_oplus_ddk_module(
-        name = "oplus_bsp_tp_nt36532_noflash",
-        srcs = native.glob([
-            "**/*.h",
-            "Novatek/NT36532_noflash/nvt_drivers_nt36532_noflash.c",
-        ]),
-        ko_deps = [
-            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_custom",
-            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_common",
-            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_novatek_common",
-        ],
-        includes = ["."],
-#        local_defines = ["CONFIG_REMOVE_OPLUS_FUNCTION"],
-    )
-
     define_oplus_ddk_module(
         name = "oplus_bsp_tp_ft3683g",
         srcs = native.glob([
@@ -106,21 +90,6 @@ def define_oplus_local_modules():
             "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_custom",
             "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_common",
         ],
-#        local_defines = ["CONFIG_REMOVE_OPLUS_FUNCTION"],
-    )
-
-    define_oplus_ddk_module(
-        name = "oplus_bsp_tp_ft3681",
-        srcs = native.glob([
-            "**/*.h",
-            "Focal/ft3681/*.c",
-        ]),
-        ko_deps = [
-            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_custom",
-            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_common",
-            "//vendor/oplus/kernel/touchpanel/oplus_touchscreen_v2:oplus_bsp_tp_focal_common",
-        ],
-        includes = ["."],
 #        local_defines = ["CONFIG_REMOVE_OPLUS_FUNCTION"],
     )
 
@@ -194,7 +163,7 @@ def define_oplus_local_modules():
         local_defines = ["CONFIG_TOUCHPANEL_NOTIFY", "CONFIG_TOUCHPANEL_OPLUS_MODULE"],
         conditional_defines = {
             "qcom":  ["CONFIG_QCOM_PANEL_EVENT_NOTIFIER"],
-            "mtk":  ["CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY", "CONFIG_TOUCHPANEL_MTK_PLATFORM"],
+            "mtk":  ["CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY"],
         },
     )
 
@@ -214,9 +183,7 @@ def define_oplus_local_modules():
             "oplus_bsp_tp_tcm_S3910",
             "oplus_bsp_tp_novatek_common",
             "oplus_bsp_tp_nt36672c_noflash",
-            "oplus_bsp_tp_nt36532_noflash",
             "oplus_bsp_tp_focal_common",
-            "oplus_bsp_tp_ft3681",
             "oplus_bsp_tp_ft3658u_spi",
             "oplus_bsp_tp_ft3518",
             "oplus_bsp_tp_custom",

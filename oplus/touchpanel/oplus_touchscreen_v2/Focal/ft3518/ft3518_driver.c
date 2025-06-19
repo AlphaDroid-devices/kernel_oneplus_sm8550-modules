@@ -7,7 +7,6 @@
 #include <linux/module.h>
 #include <linux/gpio.h>
 #include <linux/string.h>
-#include <linux/thermal.h>
 
 #include "ft3518_core.h"
 
@@ -1358,37 +1357,6 @@ static int fts_enable_headset_mode(struct chip_data_ft3518 *ts_data,
 	return touch_i2c_write_byte(ts_data->client, FTS_REG_HEADSET_MODE_EN, enable);
 }
 
-static void fts_force_glove_mode(struct chip_data_ft3518 *ts_data, bool enable)
-{
-	int retval = 0;
-	int regval = 0;
-
-	TPD_INFO("%s: %s force glove mode.\n", __func__, enable ? "Enter" : "Exit");
-
-	regval = touch_i2c_read_byte(ts_data->client, FTS_REG_GLOVE_MODE_SWITCH);
-	if(regval < 0) {
-		TPD_INFO("Failed to get glove mode config\n");
-		return;
-	}
-	TPD_INFO("%s: before edit glove mode reg_val=0x%x", __func__, regval);
-
-	if(enable)
-		retval = touch_i2c_write_byte(ts_data->client, FTS_REG_GLOVE_MODE_SWITCH, 0x01);
-	else
-		retval = touch_i2c_write_byte(ts_data->client, FTS_REG_GLOVE_MODE_SWITCH, 0x00);
-	if(retval < 0) {
-		TPD_INFO("Failed to set glove mode config\n");
-		return;
-	}
-
-	regval = touch_i2c_read_byte(ts_data->client, FTS_REG_GLOVE_MODE_SWITCH);
-	if(regval < 0) {
-		TPD_INFO("Failed to get glove mode config\n");
-		return;
-	}
-	TPD_INFO("%s: after edit glove mode reg_val=0x%x", __func__, regval);
-}
-
 static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 {
 	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
@@ -1435,13 +1403,6 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 
 	/*    case MODE_GLOVE:*/
 	/*        break;*/
-	case MODE_GLOVE:
-		TPD_INFO("MODE_GLOVE, Melo, ts->glove_enable = %d \n",
-		         ts_data->ts->glove_enable);
-
-		fts_force_glove_mode(ts_data, flag);
-
-		break;
 
 	case MODE_EDGE:
 		ret = fts_enable_edge_limit(ts_data, flag);
@@ -1497,54 +1458,7 @@ mode_err:
 	return ret;
 }
 
-static int fts_send_temperature(void *chip_data, int temp, bool normal_mode);
 
-#ifndef CONFIG_ARCH_QTI_VM
-static int get_now_temp(struct chip_data_ft3518 *ts_data)
-{
-	struct touchpanel_data *ts = i2c_get_clientdata(ts_data->client);
-	int result = -40000;
-	int ret = 0;
-
-#ifdef CONFIG_TOUCHPANEL_TRUSTED_TOUCH
-	if (atomic_read(&ts->trusted_touch_enabled) == 1) {
-		TPD_INFO("%s: Trusted touch is already enabled, do not get temp\n", __func__);
-		return ret;
-	}
-#endif
-
-	if (ts->is_suspended) {
-		TPD_INFO("%s : !ts->is_suspended\n", __func__);
-		return ret;
-	}
-
-	ts->oplus_shell_themal = thermal_zone_get_zone_by_name("shell_back");
-
-	if (IS_ERR(ts->oplus_shell_themal)) {
-		TPD_INFO("%s Can't get shell_back\n", __func__);
-		ts->oplus_shell_themal = NULL;
-		ret = -1;
-		return ret;
-	}
-
-	TPD_DEBUG("%s get shell_back ret:%d\n", __func__, ret);
-
-	ret = thermal_zone_get_temp(ts->oplus_shell_themal, &result);
-	if (ret < 0)
-		TPD_INFO("%s can't thermal_zone_get_temp, ret=%d\n", __func__, ret);
-
-	result = result / 1000;
-	TPD_INFO("%s : temp is %d\n", __func__, result);
-
-	if (result <= MAX_TEMPERATURE && result >= MIN_TEMPERATURE) {
-		fts_send_temperature(ts->chip_data, result, true);
-	} else {
-		ts->monitor_data.abnormal_temperature_count++;
-	}
-
-	return ret;
-}
-#endif
 
 /*
  * return success: 0; fail : negative
@@ -1555,11 +1469,7 @@ static int fts_reset(void *chip_data)
 
 	TPD_INFO("%s:call\n", __func__);
 	fts_hw_reset(ts_data, RESET_TO_NORMAL_TIME);
-        if (ts_data->ts->temperature_detect_shellback_support == true) {
-#ifndef CONFIG_ARCH_QTI_VM
-                get_now_temp(ts_data);
-#endif
-        }
+
 	return 0;
 }
 
@@ -1792,15 +1702,10 @@ static u32 fts_u32_trigger_reason(void *chip_data, int gesture_enable,
 		}
 	}
 
-	if ((buf[0] == 0xFF) && (buf[1] == 0xFF) && (buf[2] == 0xFF) && (!is_suspended) && !CHK_BIT(result_event, IRQ_PALM)) {
+	if ((buf[0] == 0xFF) && (buf[1] == 0xFF) && (buf[2] == 0xFF) && (!is_suspended)) {
 		TPD_INFO("Need recovery TP state");
 		ret = touch_i2c_read_byte(ts_data->client, FTS_REG_POINTS_LB);
 		return IRQ_FW_AUTO_RESET;
-	}
-
-	/*glove mode*/
-	if (!(buf[0] == 0xFF && buf[1] == 0 && buf[2] == 0xFF)) {
-		TPD_DEBUG("%s, GloveMode:%d", __func__, buf[0]&0x40 ? 1 : 0);
 	}
 
 	/*confirm need print debug info*/
@@ -2040,29 +1945,17 @@ static void fts_health_report(void *chip_data, struct monitor_data *mon_data)
 	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
 
 	ret = touch_i2c_read_byte(ts_data->client, 0x01);
-	TPD_INFO("Health register(0x01):0x%x", ret);
-	if(ret != 0xff) {
-		if ((ret & 0x40) && (ts_data->glove_mode_flag == 0)) {
-			TPD_INFO("Health register(0x01):GloveMode:1");
-			ts_data->glove_mode_flag = 1;
-			tp_healthinfo_report(mon_data, HEALTH_GLOVE, &ts_data->glove_mode_flag);
-		}
-		if ((!(ret & 0x40)) && (ts_data->glove_mode_flag == 1)) {
-			TPD_INFO("Health register(0x01):GloveMode:0");
-			ts_data->glove_mode_flag = 0;
-			tp_healthinfo_report(mon_data, HEALTH_GLOVE, &ts_data->glove_mode_flag);
-		}
 
-		if ((ret & 0x01) && (ts_data->water_mode == 0)) {
-			ts_data->water_mode = 1;
-			TPD_INFO("%s:water flag =%d", __func__, ts_data->water_mode);
-		}
-		if ((!(ret & 0x01)) && (ts_data->water_mode == 1)) {
-			ts_data->water_mode = 0;
-			TPD_INFO("%s:water flag =%d", __func__, ts_data->water_mode);
-		}
+	if (ret & 0x01) {
+		ts_data->water_mode = 1;
+		TPD_INFO("%s:water flag =%d", __func__, ts_data->water_mode);
+	}
+	else {
+		ts_data->water_mode = 0;
+		TPD_INFO("%s:water flag error", __func__);
 	}
 
+	TPD_INFO("Health register(0x01):0x%x", ret);
 	ret = touch_i2c_read_byte(ts_data->client, FTS_REG_HEALTH_1);
 	TPD_INFO("Health register(0xFD):0x%x", ret);
 	ret = touch_i2c_read_byte(ts_data->client, FTS_REG_HEALTH_2);
@@ -2377,25 +2270,6 @@ static int fts_set_high_frame_rate(void *chip_data, int level, int time)
 	return ret;
 }
 
-static int fts_send_temperature(void *chip_data, int temp, bool normal_mode)
-{
-        struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
-        int ret = 0;
-
-        ts_data->tp_temperature = temp;
-        TPD_INFO("%s:temperature:%d!\n", __func__, ts_data->tp_temperature);
-
-        if (!!normal_mode) {
-		ret = touch_i2c_write_byte(ts_data->client, FTS_REG_TEMPERATURE, ts_data->tp_temperature&0xFF);
-                if (ret < 0) {
-                        TPD_INFO("%s:fts send temperature fail", __func__);
-                }
-                TPD_INFO("%s:fts send temperature:%d suc!", __func__, ts_data->tp_temperature);
-        }
-
-        return 0;
-}
-
 static void fts_set_gesture_state(void *chip_data, int state)
 {
 	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
@@ -2410,9 +2284,6 @@ static int fts_diaphragm_touch_lv_set(void *chip_data, int level)
 	u8 retval = 0;
 	u8 diaphragm_mode = 0;
 
-	if (ts_data == NULL || ts_data->client == NULL) {
-		return 0;
-	}
 	TPD_INFO("%s:level=%d", __func__, level);
 	retval = touch_i2c_read_byte(ts_data->client, FTS_REG_DIAPHRAGM_EN);
 
@@ -2586,25 +2457,6 @@ static int ft3518_parse_dts(struct chip_data_ft3518 *ts_data, struct i2c_client 
 	return 0;
 }
 
-static void fts_get_glove_mode(void *chip_data, int *enable)
-{
-	int regval = 0;
-	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
-
-	if (!ts_data || !enable) {
-		TPD_INFO("Failed to get glove mode config, null pointer");
-		return;
-	}
-
-	regval = touch_i2c_read_byte(ts_data->client, FTS_REG_GLOVE_MODE_SWITCH);
-	if(regval < 0) {
-		TPD_INFO("Failed to get glove mode config\n");
-		return;
-	}
-
-	*enable = regval;
-	return;
-}
 
 static struct oplus_touchpanel_operations fts_ops = {
 	.power_control              = fts_power_control,
@@ -2632,11 +2484,9 @@ static struct oplus_touchpanel_operations fts_ops = {
 	.enable_gesture_mask        = fts_enable_gesture_mask,
 	.set_high_frame_rate        = fts_set_high_frame_rate,
 	.set_gesture_state          = fts_set_gesture_state,
-	.send_temperature           = fts_send_temperature,
-	.get_glove_mode             = fts_get_glove_mode,
+	.diaphragm_touch_lv_set     = fts_diaphragm_touch_lv_set,
 	.get_water_mode             = fts_get_water_mode,
 	.force_water_mode           = fts_force_water_mode,
-	.diaphragm_touch_lv_set     = fts_diaphragm_touch_lv_set,
 	.rate_white_list_ctrl       = fts_rate_white_list_ctrl,
 	/*todo
 	        .get_vendor                 = synaptics_get_vendor,

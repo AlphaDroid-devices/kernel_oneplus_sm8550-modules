@@ -217,13 +217,6 @@ enum module_type {
 	TCM_LAST,
 };
 
-enum FOD_HEALTH_INFO {
-	FOD_ENABLE_NO_ERROR = 0,
-	FINGER_AREA_NOT_MEET = 7,
-	OTHER_FINGER_OUT_FP_ZONE = 8,
-	HAS_FINGER_BEFORE_FP_ENABLE = 9,
-};
-
 enum boot_mode {
 	MODE_APPLICATION        = 0x01,
 	MODE_HOST_DOWNLOAD      = 0x02,
@@ -388,13 +381,6 @@ enum stretch_status {
 	EDGE_STRETCH_LEFT,
 };
 
-enum smart_mode {
-	DIAPHRAGM_DEFAULT_MODE = 0,
-	DIAPHRAGM_FILM_MODE = 1,
-	DIAPHRAGM_WATERPROO_MODE = 2,
-	DIAPHRAGM_FILM_WATERPROO_MODE = 3,
-};
-
 enum mois_mode {
 	MOIS_DISABLED = 0,
 	MOIS_ENABLED = 1,
@@ -557,13 +543,6 @@ struct syna_dc_in_driver {
 	uint16_t g_abs_dark_sel;
 };
 
-struct spi_bus_data {
-	unsigned char *buf;
-	unsigned int buf_size;
-	struct spi_transfer *xfer;
-	unsigned int xfer_count;
-};
-
 #define FP_AREA_RATE_BLACKSCREEN 1024
 
 struct fp_area_rate {
@@ -574,7 +553,6 @@ struct fp_area_rate {
 
 #define FIRMWARE_MODE_BL_MAX 2
 #define FPS_REPORT_NUM 6
-#define GAME_REPORT_NUM 5
 #define ERROR_STATE_MAX 3
 #define FWUPDATE_BL_MAX 3
 #define FW_BUF_SIZE             (256 * 1024)
@@ -677,8 +655,6 @@ struct syna_tcm_data {
 	bool switch_game_rate_support;
 	unsigned int fps_report_rate_num;
 	u32 fps_report_rate_array[FPS_REPORT_NUM];
-	unsigned int game_report_rate_num;
-	u32 game_report_rate_array[GAME_REPORT_NUM];
 	/*temperatue data*/
 	u32 syna_tempepratue[2];
 	unsigned int syna_low_temp_enable;
@@ -705,7 +681,6 @@ struct syna_tcm_data {
 	bool high_resolution_support_x16;
 
 	unsigned int end_of_foreach;
-	struct spi_bus_data spi_data;
 	/*device s3910*/
 	int pre_remaining_frames;
 	bool report_flag;

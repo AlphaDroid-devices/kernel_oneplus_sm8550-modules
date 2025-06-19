@@ -1683,8 +1683,6 @@ static void disable_algo_for_ime_showing(struct kernel_grip_info *grip_info)
 			grip_info->finger_hold_differ_size_restore = 1;
 			grip_info->finger_hold_differ_size_support = 0;
 		}
-		grip_info->large_corner_detect_time_ms_restore = grip_info->large_corner_detect_time_ms;
-		grip_info->large_corner_detect_time_ms = grip_info->large_corner_detect_time_ms_ime;
 	} else {
 		if (grip_info->long_eliminate_point_restore) {
 			grip_info->long_eliminate_point_restore = 0;
@@ -1694,7 +1692,6 @@ static void disable_algo_for_ime_showing(struct kernel_grip_info *grip_info)
 			grip_info->finger_hold_differ_size_restore = 0;
 			grip_info->finger_hold_differ_size_support = 1;
 		}
-		grip_info->large_corner_detect_time_ms = grip_info->large_corner_detect_time_ms_restore;
 	}
 }
 
@@ -4841,14 +4838,6 @@ static int kernel_grip_init_v4(struct kernel_grip_info *grip_info, struct device
 		grip_info->edge_swipe_makeup_optimization_support = temp_array[3];
 	}
 
-	ret = of_property_read_u32_array(dev->of_node, "prevention,large_corner_judge_condition_ime", temp_array, 5);
-	if (ret) {
-		grip_info->large_corner_detect_time_ms_ime = grip_info->large_corner_detect_time_ms;
-		GRIP_TP_INFO("large corner judge condition using default.\n");
-	} else {
-		grip_info->large_corner_detect_time_ms_ime = temp_array[0];
-	}
-
 	transform_normal_para(grip_info);
 
 	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,reclining_mode_support", temp_array, 1);
@@ -5041,7 +5030,6 @@ static int kernel_grip_init_V2(struct kernel_grip_info *grip_info, struct device
 		grip_info->xfsr_corner_exit_thd = temp_array[3];
 		grip_info->yfsr_corner_exit_thd = temp_array[4];
 	}
-	grip_info->large_corner_detect_time_ms_restore = grip_info->large_corner_detect_time_ms;
 
 	ret = of_property_read_u32_array(dev->of_node, "prevention,trx_reject_condition", temp_array, 3);
 	if (ret) {
@@ -5230,14 +5218,14 @@ static int kernel_grip_init_V2(struct kernel_grip_info *grip_info, struct device
 		}
 	} else {
 		kernel_grip_release(grip_info);
-		TPD_INFO("kzalloc grip_zone_area for coord_buffer failed.\n");
+		GRIP_TP_INFO("kzalloc grip_zone_area for coord_buffer failed.\n");
 		return -1;
 	}
 
 	ret = kfifo_alloc(&grip_info->up_fifo, PAGE_SIZE, GFP_KERNEL);
 	if (ret) {
 		kernel_grip_release(grip_info);
-		TPD_INFO("up_fifo malloc failed.\n");
+		GRIP_TP_INFO("up_fifo malloc failed.\n");
 		return -1;
 	}
 	for (i_index = 0; i_index < TOUCH_MAX_NUM; i_index++) {
@@ -5644,7 +5632,7 @@ struct kernel_grip_info *kernel_grip_init(struct device *dev)
 
 	} else {
 		kernel_grip_release(grip_info);
-		TPD_INFO("kzalloc grip_zone_area for coord_buffer failed.\n");
+		GRIP_TP_INFO("kzalloc grip_zone_area for coord_buffer failed.\n");
 		grip_info = NULL;
 		return NULL;
 	}
@@ -5971,7 +5959,7 @@ struct kernel_grip_info *kernel_grip_init(struct device *dev)
 
 	if (ret) {
 		kernel_grip_release(grip_info);
-		TPD_INFO("up_fifo malloc failed.\n");
+		GRIP_TP_INFO("up_fifo malloc failed.\n");
 		grip_info = NULL;
 		return NULL;
 	}

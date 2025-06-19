@@ -4,15 +4,6 @@
 subdir-ccflags-$(CONFIG_TOUCHPANEL_MTK_PLATFORM) += -I$(srctree)/drivers/misc/mediatek/include/
 subdir-ccflags-$(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY) += -I$(srctree)/drivers/misc/mediatek/include/
 
-ifeq ($(OPLUS_FEATURE_BSP_DRV_INJECT_TEST),1)
-ccflags-y += -DCONFIG_TOUCHPANEL_FAULT_INJECT_ENABLE
-$(info OPLUS_FEATURE_BSP_DRV_INJECT_TEST and CONFIG_TOUCHPANEL_FAULT_INJECT_ENABLE is Y)
-else ifeq ($(OPLUS_FEATURE_BSP_DRV_VND_INJECT_TEST),1)
-ccflags-y += -DCONFIG_TOUCHPANEL_FAULT_INJECT_ENABLE
-$(info OPLUS_FEATURE_BSP_DRV_VND_INJECT_TEST and CONFIG_TOUCHPANEL_FAULT_INJECT_ENABLE is Y)
-else
-$(info CONFIG_TOUCHPANEL_FAULT_INJECT_ENABLE is N)
-endif
 
 oplus_bsp_tp_comon-y := util_interface/touch_interfaces.o
 oplus_bsp_tp_comon-y += touch_comon_api/touch_comon_api.o
@@ -41,8 +32,6 @@ obj-$(CONFIG_TOUCHPANEL_NOVA) += Novatek/
 obj-$(CONFIG_TOUCHPANEL_HIMAX) += Himax/
 obj-$(CONFIG_TOUCHPANEL_SAMSUNG) += Samsung/
 obj-$(CONFIG_TOUCHPANEL_ILITEK) += ilitek/
-obj-$(CONFIG_TOUCHPANEL_JADARD) += Jadard/
 obj-$(CONFIG_TOUCHPANEL_ST) += St/
-obj-$(CONFIG_TOUCHPANEL_CHIPONE) += chipone/
 
 KBUILD_CFLAGS += -Wframe-larger-than=4096

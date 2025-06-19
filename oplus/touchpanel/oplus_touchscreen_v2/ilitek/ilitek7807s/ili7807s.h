@@ -72,7 +72,7 @@
 #include "../ilitek_common.h"
 #include <soc/oplus/system/oplus_project.h>
 
-#define DRIVER_VERSION                  "3.0.4.0.230913"
+#define DRIVER_VERSION          "3.0.4.0.220107"
 
 /* Options */
 #define TR_BUF_SIZE                 (2*K)  /* Buffer size of touch report */
@@ -196,7 +196,6 @@ extern bool ili_debug_en;
 #define WDT9_DUMMY2                 (WDT_DUMMY_BASED_ADDR + 0x08)
 
 /* The example for the gesture virtual keys */
-#define GESTURE_SINGLECLICK                 0x57
 #define GESTURE_DOUBLECLICK                 0x58
 #define GESTURE_UP                          0x60
 #define GESTURE_DOWN                        0x61
@@ -223,7 +222,6 @@ extern bool ili_debug_en;
 #define SPI_ESD_GESTURE_PWD_ADDR            0x25FF8
 #define I2C_ESD_GESTURE_PWD_ADDR            0x40054
 
-#define AOD_GESTURE_CORE146_PWD             0x6E9F
 #define ESD_GESTURE_CORE146_PWD             0xF38A
 #define SPI_ESD_GESTURE_CORE146_RUN         0x5B92
 #define I2C_ESD_GESTURE_CORE146_RUN         0xA67C
@@ -249,7 +247,6 @@ extern bool ili_debug_en;
 #define ALPHABET_TWO_LINE_2_BOTTOM          (ON)  /*BIT16*/
 #define ALPHABET_F                          (OFF) /*BIT17*/
 #define ALPHABET_AT                         (OFF) /*BIT18*/
-#define SINGL_TAP                           (ON)  /*BIT19*/
 
 /* FW data format */
 #define DATA_FORMAT_DEMO_CMD                0x00
@@ -314,7 +311,6 @@ extern bool ili_debug_en;
 #define P5_X_TEST_PACKET_ID                 0xF2
 #define P5_X_GESTURE_PACKET_ID              0xAA
 #define P5_X_GESTURE_FAIL_ID                0xAE
-#define P5_X_GESTURE_AOD_ID                 0xBD
 #define P5_X_I2CUART_PACKET_ID              0x7A
 #define P5_X_DEBUG_LITE_PACKET_ID           0x9A
 #define P5_X_SLAVE_MODE_CMD_ID              0x5F
@@ -328,10 +324,6 @@ extern bool ili_debug_en;
 #define P5_X_DEMO_HIGH_RESOLUTION_PACKET_ID		0x5B
 #define P5_X_DEBUG_HIGH_RESOLUTION_PACKET_ID	0xA8
 #define P5_X_DEMO_PALM_PACKET_ID                0xBB
-
-/*differ_mode*/
-#define POSITION_DIFFER_LOW_RESOLUTION		0x03
-#define POSITION_DIFFER_HIGH_RESOLUTION		0x04
 
 /* Chips */
 #define ILI9881_CHIP                    0x9881
@@ -544,7 +536,6 @@ enum {
 
 struct gesture_symbol {
 	u8 double_tap                 : 1;
-	u8 single_tap                 : 1;
 	u8 alphabet_line_2_top        : 1;
 	u8 alphabet_line_2_bottom     : 1;
 	u8 alphabet_line_2_left       : 1;
@@ -573,8 +564,7 @@ struct report_info_block {
 	u8 nIsSPISLAVE      : 1;
 	u8 nIsI2C           : 1;
 	u8 nReserved00      : 3;
-	u8 nReportResolutionMode: 3;
-	u8 nReserved01          : 5;
+	u8 nReserved01      : 8;
 	u8 nReserved02      : 8;
 	u8 nReserved03      : 8;
 };
@@ -675,7 +665,6 @@ struct ilitek_ts_data {
 	unsigned long irq_timer;
 	bool ignore_first_irq;
 	struct firmware *p_firmware_headfile;   /*for ili firmware*/
-	struct firmware_headfile *p_firmware_headfile_h;   /*for ili .h firmware*/
 	tp_dev tp_type;
 	char *fw_name;
 	char *test_limit_name;
@@ -779,13 +768,7 @@ struct ilitek_ts_data {
 	bool pll_clk_wakeup;
 	bool position_high_resolution;
 	bool eng_flow;
-	bool differ_mode;
 
-	int glove_mode_flag;
-	int glove_mode_status;
-	u8 glove_mode;
-	u8 water_flag;
-	s16 thr;
 	atomic_t irq_stat;
 	atomic_t tp_reset;
 	atomic_t ice_stat;
@@ -815,7 +798,7 @@ struct ilitek_ts_data {
 
 	struct monitor_data *monitor_data;
 	int tp_index;
-	bool aod_in;
+
 	int mp_result_count;
 	struct core_mp_test_data core_mp;
 };
@@ -936,7 +919,6 @@ extern int ili_fw_upgrade(int op);
 
 
 /* Prototypes for tddi core functions */
-extern int ili_aod_control(bool ctrl);
 extern int ili_touch_esd_gesture_iram(void);
 extern void ili_set_gesture_symbol(void);
 extern int ili_move_gesture_code_iram(int mode);

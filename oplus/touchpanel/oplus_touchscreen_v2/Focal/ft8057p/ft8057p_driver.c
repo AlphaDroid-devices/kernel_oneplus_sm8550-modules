@@ -3437,4 +3437,3 @@ module_exit(tp_driver_exit_ft8057p);
 
 MODULE_DESCRIPTION("Touchscreen ft8057p Driver");
 MODULE_LICENSE("GPL");
-

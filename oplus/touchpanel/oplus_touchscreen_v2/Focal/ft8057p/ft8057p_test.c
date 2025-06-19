@@ -2596,4 +2596,3 @@ test_err:
 	FTS_TEST_FUNC_EXIT();
 	return ret;
 }
-

@@ -96,6 +96,9 @@ const struct mtk_chip_config st_spi_ctrdata = {
 	.tick_delay = 0,
 };
 #endif
+static unsigned char *buf;
+static unsigned int buf_size;
+static struct spi_transfer *xfer;
 
 static struct syna_tcm_data *g_tcm_info[TP_SUPPORT_MAX] = {NULL};
 
@@ -120,34 +123,32 @@ static void syna_tcm_fw_update_in_bl(void *chip_data);
 static int syna_tcm_spi_alloc_mem(struct syna_tcm_data *tcm_hcd,
 				  unsigned int count, unsigned int size)
 {
-	struct spi_bus_data *spi_data = NULL;
+	static unsigned int xfer_count;
 
-	spi_data = &tcm_hcd->spi_data;
-
-	if (count > spi_data->xfer_count) {
-		kfree(spi_data->xfer);
-		spi_data->xfer = kcalloc(count, sizeof(*spi_data->xfer), GFP_KERNEL);
-		if (!spi_data->xfer) {
-			TP_INFO(tcm_hcd->tp_index, "Failed to allocate memory for xfer\n");
-			spi_data->xfer_count = 0;
+	if (count > xfer_count) {
+		kfree(xfer);
+		xfer = kcalloc(count, sizeof(*xfer), GFP_KERNEL);
+		if (!xfer) {
+			TPD_INFO("Failed to allocate memory for xfer\n");
+			xfer_count = 0;
 			return -ENOMEM;
 		}
-		spi_data->xfer_count = count;
+		xfer_count = count;
 	} else {
-		memset(spi_data->xfer, 0, count * sizeof(*spi_data->xfer));
+		memset(xfer, 0, count * sizeof(*xfer));
 	}
 
-	if (size > spi_data->buf_size) {
-		if (spi_data->buf_size) {
-			kfree(spi_data->buf);
+	if (size > buf_size) {
+		if (buf_size) {
+			kfree(buf);
 		}
-		spi_data->buf = kmalloc(size, GFP_KERNEL);
-		if (!spi_data->buf) {
-			TP_INFO(tcm_hcd->tp_index, "Failed to allocate memory for buf\n");
-			spi_data->buf_size = 0;
+		buf = kmalloc(size, GFP_KERNEL);
+		if (!buf) {
+			TPD_INFO("Failed to allocate memory for buf\n");
+			buf_size = 0;
 			return -ENOMEM;
 		}
-		spi_data->buf_size = size;
+		buf_size = size;
 	}
 
 	return 0;
@@ -166,12 +167,10 @@ static inline int syna_tcm_read(struct syna_tcm_data *tcm_hcd,
 	int retval;
 	int retval_err = -1;
 	unsigned int idx;
-	struct spi_bus_data *spi_data = NULL;
 	struct spi_message msg;
 	struct spi_device *spi = tcm_hcd->client;
 	spi_message_init(&msg);
 
-	spi_data = &tcm_hcd->spi_data;
 
 	if (tcm_hcd->byte_delay_us == 0) {
 		retval = syna_tcm_spi_alloc_mem(tcm_hcd, 1, length);
@@ -184,29 +183,29 @@ static inline int syna_tcm_read(struct syna_tcm_data *tcm_hcd,
 	}
 
 	if (tcm_hcd->byte_delay_us == 0) {
-		memset(spi_data->buf, 0xff, length);
-		spi_data->xfer[0].len = length;
-		spi_data->xfer[0].tx_buf = spi_data->buf;
-		spi_data->xfer[0].rx_buf = data;
+		memset(buf, 0xff, length);
+		xfer[0].len = length;
+		xfer[0].tx_buf = buf;
+		xfer[0].rx_buf = data;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 13, 0))
 		if (tcm_hcd->block_delay_us) {
-			spi_data->xfer[0].delay_usecs = tcm_hcd->block_delay_us;
+			xfer[0].delay_usecs = tcm_hcd->block_delay_us;
 		}
 #endif
-		spi_message_add_tail(&spi_data->xfer[0], &msg);
+		spi_message_add_tail(&xfer[0], &msg);
 	} else {
-		spi_data->buf[0] = 0xff;
+		buf[0] = 0xff;
 		for (idx = 0; idx < length; idx++) {
-			spi_data->xfer[idx].len = 1;
-			spi_data->xfer[idx].tx_buf = spi_data->buf;
-			spi_data->xfer[idx].rx_buf = &data[idx];
+			xfer[idx].len = 1;
+			xfer[idx].tx_buf = buf;
+			xfer[idx].rx_buf = &data[idx];
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 13, 0))
-			spi_data->xfer[idx].delay_usecs = tcm_hcd->byte_delay_us;
+			xfer[idx].delay_usecs = tcm_hcd->byte_delay_us;
 			if (tcm_hcd->block_delay_us && (idx == length - 1)) {
-				spi_data->xfer[idx].delay_usecs = tcm_hcd->block_delay_us;
+				xfer[idx].delay_usecs = tcm_hcd->block_delay_us;
 			}
 #endif
-			spi_message_add_tail(&spi_data->xfer[idx], &msg);
+			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
 	retval = spi_sync(spi, &msg);
@@ -217,11 +216,11 @@ static inline int syna_tcm_read(struct syna_tcm_data *tcm_hcd,
 	}
 exit:
 	if (tcm_hcd->monitor_data && tcm_hcd->monitor_data->health_monitor_support
-			   && (retval < 0 || CHK_BIT_NUM(tcm_hcd->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS))) {
-		tcm_hcd->monitor_data->bus_buf = spi_data->buf;
+			   && (retval < 0 || tcm_hcd->monitor_data->health_simulate_trigger)) {
+		tcm_hcd->monitor_data->bus_buf = buf;
 		tcm_hcd->monitor_data->bus_len = length;
 		tp_healthinfo_report(tcm_hcd->monitor_data, HEALTH_BUS,
-			   CHK_BIT_NUM(tcm_hcd->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS) ? &retval_err : &retval);
+			   tcm_hcd->monitor_data->health_simulate_trigger ? &retval_err : &retval);
 	}
 	return retval;
 }
@@ -240,12 +239,9 @@ static inline int syna_tcm_write(struct syna_tcm_data *tcm_hcd,
 	int retval;
 	int retval_err = -1;
 	unsigned int idx;
-	struct spi_bus_data *spi_data = NULL;
-
 	struct spi_message msg;
 	struct spi_device *spi = tcm_hcd->client;
 	spi_message_init(&msg);
-	spi_data = &tcm_hcd->spi_data;
 
 	if (tcm_hcd->byte_delay_us == 0) {
 		retval = syna_tcm_spi_alloc_mem(tcm_hcd, 1, 0);
@@ -259,25 +255,25 @@ static inline int syna_tcm_write(struct syna_tcm_data *tcm_hcd,
 
 
 	if (tcm_hcd->byte_delay_us == 0) {
-		spi_data->xfer[0].len = length;
-		spi_data->xfer[0].tx_buf = data;
+		xfer[0].len = length;
+		xfer[0].tx_buf = data;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 13, 0))
 		if (tcm_hcd->block_delay_us) {
-			spi_data->xfer[0].delay_usecs = tcm_hcd->block_delay_us;
+			xfer[0].delay_usecs = tcm_hcd->block_delay_us;
 		}
 #endif
-		spi_message_add_tail(&spi_data->xfer[0], &msg);
+		spi_message_add_tail(&xfer[0], &msg);
 	} else {
 		for (idx = 0; idx < length; idx++) {
-			spi_data->xfer[idx].len = 1;
-			spi_data->xfer[idx].tx_buf = &data[idx];
+			xfer[idx].len = 1;
+			xfer[idx].tx_buf = &data[idx];
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 13, 0))
-			spi_data->xfer[idx].delay_usecs = tcm_hcd->byte_delay_us;
+			xfer[idx].delay_usecs = tcm_hcd->byte_delay_us;
 			if (tcm_hcd->block_delay_us && (idx == length - 1)) {
-					  spi_data->xfer[idx].delay_usecs = tcm_hcd->block_delay_us;
+					  xfer[idx].delay_usecs = tcm_hcd->block_delay_us;
 			}
 #endif
-			spi_message_add_tail(&spi_data->xfer[idx], &msg);
+			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
 	retval = spi_sync(spi, &msg);
@@ -288,11 +284,11 @@ static inline int syna_tcm_write(struct syna_tcm_data *tcm_hcd,
 	}
 exit:
 	if (tcm_hcd->monitor_data && tcm_hcd->monitor_data->health_monitor_support
-			   && (retval < 0 || CHK_BIT_NUM(tcm_hcd->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS))) {
+			   && (retval < 0 || tcm_hcd->monitor_data->health_simulate_trigger)) {
 		tcm_hcd->monitor_data->bus_buf = data;
 		tcm_hcd->monitor_data->bus_len = length;
 		tp_healthinfo_report(tcm_hcd->monitor_data, HEALTH_BUS,
-			   CHK_BIT_NUM(tcm_hcd->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_BUS) ? &retval_err : &retval);
+			   tcm_hcd->monitor_data->health_simulate_trigger ? &retval_err : &retval);
 	}
 	return retval;
 }
@@ -383,6 +379,7 @@ static int syna_parse_report(struct syna_tcm_data *tcm_info)
 	struct touch_hcd *touch_hcd = NULL;
 	struct touch_data *touch_data = NULL;
 	struct object_data *object_data = NULL;
+	static unsigned int end_of_foreach = 0;
 
 	touch_hcd = tcm_info->touch_hcd;
 	touch_data = &touch_hcd->touch_data;
@@ -413,7 +410,7 @@ static int syna_parse_report(struct syna_tcm_data *tcm_info)
 			break;
 
 		case TOUCH_FOREACH_END:
-			tcm_info->end_of_foreach = idx;
+			end_of_foreach = idx;
 
 			if (active_only) {
 				if (num_of_active_objects) {
@@ -808,7 +805,7 @@ static int syna_parse_report(struct syna_tcm_data *tcm_info)
 			offset += bits;
 
 			if (touch_data->num_of_active_objects == 0) {
-				idx = tcm_info->end_of_foreach;
+				idx = end_of_foreach;
 			}
 
 			break;
@@ -3296,16 +3293,16 @@ static int syna_tcm_set_game_mode(struct syna_tcm_data *tcm_info, int enable)
 		if (tcm_info->switch_game_rate_support) {/*tcm_info->game_rate_switch_support*/
 			switch (ts->noise_level) {
 			case SYNA_GET_RATE_120:
-				report_rate = tcm_info->game_report_rate_array[0];
+				report_rate = SYNA_120HZ_REPORT_RATE;
 				break;
 			case SYNA_GET_RATE_240:
-				report_rate = tcm_info->game_report_rate_array[1];
+				report_rate = SYNA_240HZ_REPORT_RATE;
 				break;
 			case SYNA_GET_RATE_360:
-				report_rate = tcm_info->game_report_rate_array[2];
+				report_rate = SYNA_360HZ_REPORT_RATE;
 				break;
 			case SYNA_GET_RATE_720:
-				report_rate = tcm_info->game_report_rate_array[3];
+				report_rate = SYNA_720HZ_REPORT_RATE;
 				break;
 			case SYNA_GET_RATE_180:
 				report_rate = SYNA_180HZ_REPORT_RATE;
@@ -4185,8 +4182,8 @@ static void syna_tcm_get_health_info(void *chip_data,
 
 	if ((health_info->baseline_err != 0
 	    && health_local->baseline_err != health_info->baseline_err)
-	    || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-		if (CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	    || mon_data->health_simulate_trigger) {
+		if (mon_data->health_simulate_trigger) {
 			health_info->baseline_err = SIMULATE_DEBUG_INFO;
 		}
 		switch (health_info->baseline_err) {
@@ -4195,73 +4192,73 @@ static void syna_tcm_get_health_info(void *chip_data,
 			fallthrough;
 		case BASE_V2_CLASSIFIER_BL:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_classifier_bl");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_ABS_POSITIVITY_TX:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_txabs_baseline");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_ABS_POSITIVITY_RX:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_rxabs_baseline");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_ENERGY_RATIO:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_energy_ratio");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_BUMPINESS:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_bumpiness");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_NEGTIVE_FINGER:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_negative_finger");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_STD_ERROR:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_std");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_CRITI_ERROR:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_criti_err");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_STD_CRITI:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_std_criti");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_METAL_PLATE:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_metal_plate");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_WATER_DROP:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_water_drop");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case BASE_V2_BIG_ABS_SHIFT:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, "base_big_abs_shift");
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
@@ -4272,7 +4269,7 @@ static void syna_tcm_get_health_info(void *chip_data,
 
 	if ((health_info->noise_state >= 2
 		    && health_local->noise_state != health_info->noise_state)
-		    || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+		    || mon_data->health_simulate_trigger) {
 		if (tcm_info->charger_connected) {
 			TP_INFO(tcm_info->tp_index, "noise state charging:%u->%u\n", health_local->noise_state, health_info->noise_state);
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_NOISE_CHARGE);
@@ -4285,7 +4282,7 @@ static void syna_tcm_get_health_info(void *chip_data,
 	/* Rx Compensation */
 	if ((health_info->cid_im != 0
 		    && health_local->cid_im != health_info->cid_im)
-		    || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+		    || mon_data->health_simulate_trigger) {
 		rx_compensated = health_info->cid_im & 0x7F;
 		report = tp_kzalloc(30, GFP_KERNEL);
 		if (report) {
@@ -4303,8 +4300,8 @@ static void syna_tcm_get_health_info(void *chip_data,
 
 	if ((health_info->shield_mode != 0
 	    && health_local->shield_mode != health_info->shield_mode)
-	    || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-		if (CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	    || mon_data->health_simulate_trigger) {
+		if (mon_data->health_simulate_trigger) {
 			health_info->shield_mode = SIMULATE_DEBUG_INFO;
 		}
 		switch (health_info->shield_mode) {
@@ -4313,31 +4310,31 @@ static void syna_tcm_get_health_info(void *chip_data,
 			fallthrough;
 		case SHIELD_PALM:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_SHIELD_PALM);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case SHIELD_GRIP:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_SHIELD_EDGE);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case SHIELD_METAL:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_SHIELD_METAL);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case SHIELD_MOISTURE:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_SHIELD_WATER);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case SHIELD_ESD:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_SHIELD_ESD);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
@@ -4348,8 +4345,8 @@ static void syna_tcm_get_health_info(void *chip_data,
 
 	if ((health_info->reset_reason != 0
 	    && health_local->reset_reason != health_info->reset_reason)
-	    || CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
-		if (CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+	    || mon_data->health_simulate_trigger) {
+		if (mon_data->health_simulate_trigger) {
 			health_info->reset_reason = SIMULATE_DEBUG_INFO;
 		}
 		switch (health_info->reset_reason) {
@@ -4358,31 +4355,31 @@ static void syna_tcm_get_health_info(void *chip_data,
 			fallthrough;
 		case RST_HARD:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_RST_HARD);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case RST_INST:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_RST_INST);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case RST_PARITY:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_RST_PARITY);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case RST_WD:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_RST_WD);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
 		case RST_OTHER:
 			tp_healthinfo_report(mon_data, HEALTH_REPORT, HEALTH_REPORT_RST_OTHER);
-			if (!CHK_BIT_NUM(mon_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_IC_HEALTHINFO)) {
+			if (!mon_data->health_simulate_trigger) {
 				break;
 			}
 			fallthrough;
@@ -4544,11 +4541,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 		}
 		if (tcm_info->g_fw_sta) {
 			ret = synaptics_parse_header_v2(&image_info, tcm_info->g_fw_buf);
-			if (ret < 0 || (tcm_info->monitor_data
-					&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+			if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 				tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "synaptics_parse_header_v2 fail");
-				if (!tcm_info->monitor_data
-						|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+				if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 					TP_INFO(tcm_info->tp_index, "Failed to parse fw image\n");
 					return FW_UPDATE_FATAL;
 				}
@@ -4559,11 +4554,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 				return FW_UPDATE_FATAL;
 			} else {
 				ret = synaptics_parse_header_v2(&image_info, fw->data);
-				if (ret < 0 || (tcm_info->monitor_data
-						&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+				if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 					tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "synaptics_parse_header_v2 fail");
-					if (!tcm_info->monitor_data
-							|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+					if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 						TP_INFO(tcm_info->tp_index, "Failed to parse fw image\n");
 						return FW_UPDATE_FATAL;
 					}
@@ -4572,11 +4565,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 		}
 	} else {
 		ret = synaptics_parse_header_v2(&image_info, fw->data);
-		if (ret < 0 || (tcm_info->monitor_data
-				&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+		if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 			tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "synaptics_parse_header_v2 fail");
-			if (!tcm_info->monitor_data
-					|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+			if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 				TP_INFO(tcm_info->tp_index, "Failed to parse fw image\n");
 				return FW_UPDATE_FATAL;
 			}
@@ -4610,11 +4601,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 	if (tcm_info->id_info.mode == MODE_APPLICATION) {
 		ret = syna_tcm_switch_mode(tcm_info, FW_MODE_BOOTLOADER);
 
-		if (ret < 0 || (tcm_info->monitor_data
-				&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+		if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 			tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "syna_tcm_switch_mode fail");
-			if (!tcm_info->monitor_data
-					|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+			if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 				TP_INFO(tcm_info->tp_index, "Failed to switch to bootloader mode\n");
 				return FW_UPDATE_ERROR;
 			}
@@ -4635,21 +4624,19 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 		 reflash_hcd.page_size,
 		 reflash_hcd.max_write_payload_size);
 
-	if (reflash_hcd.write_block_size > (tcm_info->wr_chunk_size - 5) || (tcm_info->monitor_data
-			&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+	if (reflash_hcd.write_block_size > (tcm_info->wr_chunk_size - 5)
+			   || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 		tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "write block size is exceed");
-		if (!tcm_info->monitor_data
-				|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+		if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 			TP_INFO(tcm_info->tp_index, "write block size is exceed\n");
 			return FW_UPDATE_ERROR;
 		}
 	}
 
-	if (image_info.app_firmware.size == 0 || (tcm_info->monitor_data
-			&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+	if (image_info.app_firmware.size == 0
+			   || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 		tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "no application firmware in image");
-		if (!tcm_info->monitor_data
-				|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+		if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 			TP_INFO(tcm_info->tp_index, "no application firmware in image\n\n");
 			return FW_UPDATE_ERROR;
 		}
@@ -4660,11 +4647,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 	page_count = ceil_div(image_info.app_firmware.size, reflash_hcd.page_size);
 	ret = syna_tcm_erase_flash(tcm_info, page_start, page_count);
 
-	if (ret < 0 || (tcm_info->monitor_data
-			&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+	if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 		tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "Failed to erase firmware");
-		if (!tcm_info->monitor_data
-				|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+		if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 			TP_INFO(tcm_info->tp_index, "Failed to erase firmware\n");
 			return FW_UPDATE_ERROR;
 		}
@@ -4677,11 +4662,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 
 	ret = syna_tcm_write_flash(tcm_info, &reflash_hcd, flash_addr, data, size);
 
-	if (ret < 0 || (tcm_info->monitor_data
-			&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+	if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 		tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "Failed to write flash");
-		if (!tcm_info->monitor_data
-				|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+		if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 			TP_INFO(tcm_info->tp_index, "Failed to write flash \n");
 			return FW_UPDATE_ERROR;
 		}
@@ -4704,11 +4687,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 
 	ret = syna_tcm_erase_flash(tcm_info, page_start, page_count);
 
-	if (ret < 0 || (tcm_info->monitor_data
-			&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+	if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 		tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "Failed to erase config");
-		if (!tcm_info->monitor_data
-				|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+		if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 			TP_INFO(tcm_info->tp_index, "Failed to erase config\n");
 			return FW_UPDATE_ERROR;
 		}
@@ -4716,11 +4697,9 @@ static fw_update_state syna_tcm_fw_update(void *chip_data,
 
 	ret = syna_tcm_write_flash(tcm_info, &reflash_hcd, flash_addr, data, size);
 
-	if (ret < 0 || (tcm_info->monitor_data
-			&& CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE))) {
+	if (ret < 0 || (tcm_info->monitor_data && tcm_info->monitor_data->health_simulate_trigger)) {
 		tp_healthinfo_report(tcm_info->monitor_data, HEALTH_FW_UPDATE, "Failed to write config");
-		if (!tcm_info->monitor_data
-				|| !CHK_BIT_NUM(tcm_info->monitor_data->health_simulate_trigger, HEALTH_SIMULATE_BIT_FW_UPDATE)) {
+		if (!tcm_info->monitor_data || !tcm_info->monitor_data->health_simulate_trigger) {
 			TP_INFO(tcm_info->tp_index, "Failed to write config \n");
 			return FW_UPDATE_ERROR;
 		}
@@ -4740,7 +4719,7 @@ static void syna_tcm_fw_update_in_bl(void *chip_data)
 
 
 	if (!tcm_info) {
-		TPD_INFO("%s: tcm_info is null\n", __func__);
+		TP_INFO(tcm_info->tp_index, "%s: tcm_info is null\n", __func__);
 		return;
 	}
 
@@ -4939,30 +4918,6 @@ static int syna_get_gesture_info(void *chip_data, struct gesture_info *gesture)
 		 gesture->Point_3rd.x, gesture->Point_3rd.y, \
 		 gesture->Point_4th.x, gesture->Point_4th.y);
 
-	if (touch_data->lpwg_gesture == 0x84) {
-		TP_INFO(tcm_info->tp_index, "fp_err_code:0x%x 0x%2x\n", touch_data->lpwg_gesture, tcm_info->report.buffer.buf[1]);
-		switch (tcm_info->report.buffer.buf[1]) {
-		case FOD_ENABLE_NO_ERROR:
-				tcm_info->monitor_data->p_finger_health_info->fp_enble_count++;
-				TPD_INFO("FOD_ENABLE_NO_ERROR\n");
-			break;
-		case FINGER_AREA_NOT_MEET:
-				tcm_info->monitor_data->p_finger_health_info->small_touch_fod_invail_count++;
-				TPD_INFO("FINGER_AREA_NOT_MEET\n");
-			break;
-		case OTHER_FINGER_OUT_FP_ZONE:
-				tcm_info->monitor_data->p_finger_health_info->pressed_not_in_area_count++;
-				TPD_INFO("OTHER_FINGER_OUT_FP_ZONE\n");
-			break;
-		case HAS_FINGER_BEFORE_FP_ENABLE:
-				tcm_info->monitor_data->p_finger_health_info->pressed_in_area_count++;
-				TPD_INFO("HAS_FINGER_BEFORE_FP_ENABLE\n");
-			break;
-		default:
-			break;
-		}
-	}
-
 	return 0;
 }
 
@@ -5123,7 +5078,7 @@ static int syna_trx_short_test(struct seq_file *s, void *chip_data,
 			      syna_testdata->pos, "0x%02x, ", u_data8);
 
 		for (j = 0; j < 8; j++) {
-			if (u_data8 & (1 << j)) {
+			if (1 == (u_data8 & (1 << j))) {
 				TP_INFO(tcm_info->tp_index, "trx short test failed at %d bits.\n", checked_bits + 1);
 
 				if (!error_count) {
@@ -7127,55 +7082,6 @@ static int syna_tcm_sensitive_lv_set(void *chip_data, int level)
 	return 0;
 }
 
-static int syna_tcm_diaphragm_touch_lv_set(void *chip_data, int level)
-{
-	struct syna_tcm_data *tcm_info = (struct syna_tcm_data *)chip_data;
-	unsigned short regval = 0;
-	int retval = 0;
-
-	retval = syna_tcm_get_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, &regval);
-	if (retval < 0) {
-		TPD_INFO("Failed to get diaphragm_touch config\n");
-		return 0;
-	}
-
-	switch (level) {
-	case DIAPHRAGM_DEFAULT_MODE:
-		regval = 0xfcff & regval;
-		break;
-	case DIAPHRAGM_FILM_MODE:
-		regval = 0xfcff & regval;
-		regval = 0x0100 | regval;
-		break;
-	case DIAPHRAGM_WATERPROO_MODE:
-		regval = 0xfcff & regval;
-		regval = 0x0200 | regval;
-		break;
-	case DIAPHRAGM_FILM_WATERPROO_MODE:
-		regval = 0xfcff & regval;
-		regval = 0x0200 | regval;
-		break;
-	default:
-		TPD_INFO("error, level = %d", level);
-		return 0;
-	}
-
-	retval = syna_tcm_set_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, regval);
-	if (retval < 0) {
-		TPD_INFO("Failed to set diaphragm_touch config\n");
-		return 0;
-	}
-
-	retval = syna_tcm_get_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, &regval);
-	if (retval < 0) {
-		TPD_INFO("Failed to get diaphragm_touch config\n");
-		return 0;
-	}
-	TPD_INFO("diaphragm_touch_lv_set level = %d regval = %d", level, regval);
-
-	return 0;
-}
-
 /*********** Start of kernel grip callbacks*************************/
 
 static void syna_set_grip_area_disable(void *chip_data)
@@ -7193,7 +7099,7 @@ static int syna_send_grip_to_chip(void *chip_data)
 	unsigned short len = 0;
 
 	if (!tcm_info || *tcm_info->in_suspend) {
-		TPD_INFO("%s: set grip in TP suspend !\n", __func__);
+		TP_INFO(tcm_info->tp_index, "%s: set grip in TP suspend !\n", __func__);
 		return 0;
 	}
 
@@ -8098,7 +8004,6 @@ static struct oplus_touchpanel_operations syna_tcm_ops = {
 	.specific_resume_operate	= syna_specific_resume_operate,
 	.smooth_lv_set			= syna_tcm_smooth_lv_set,
 	.sensitive_lv_set		= syna_tcm_sensitive_lv_set,
-	.diaphragm_touch_lv_set		= syna_tcm_diaphragm_touch_lv_set,
 	.get_touch_points_auto		= syna_get_touch_points_auto,
 	.get_gesture_info_auto		= syna_get_gesture_info_auto,
 	.screenon_fingerprint_info_auto	= syna_tcm_fingerprint_info_auto,
@@ -8149,12 +8054,6 @@ static void init_chip_dts(struct device *dev, void *chip_data)
 		tcm_info->fps_report_rate_array[3] = 1;
 		tcm_info->fps_report_rate_array[4] = 120;
 		tcm_info->fps_report_rate_array[5] = 2;
-		tcm_info->game_report_rate_num = GAME_REPORT_NUM;
-                tcm_info->game_report_rate_array[0] = SYNA_120HZ_REPORT_RATE;
-                tcm_info->game_report_rate_array[1] = SYNA_240HZ_REPORT_RATE;
-                tcm_info->game_report_rate_array[2] = SYNA_360HZ_REPORT_RATE;
-                tcm_info->game_report_rate_array[3] = SYNA_720HZ_REPORT_RATE;
-		tcm_info->game_report_rate_array[4] = SYNA_180HZ_REPORT_RATE;
 		tcm_info->syna_tempepratue[0] = 5;
 		tcm_info->syna_tempepratue[1] = 15;
 		tcm_info->syna_low_temp_enable = 0;
@@ -8186,8 +8085,6 @@ static void init_chip_dts(struct device *dev, void *chip_data)
 	tcm_info->gesture_mask = tcm_info->default_gesture_mask;
 	rc = of_property_count_u32_elems(chip_np, "fps_report_rate");
 	tcm_info->fps_report_rate_num = rc;
-	rc = of_property_count_u32_elems(chip_np, "game_report_rate");
-        tcm_info->game_report_rate_num = rc;
 
 	if (tcm_info->fps_report_rate_num > 0 && tcm_info->fps_report_rate_num <= FPS_REPORT_NUM
 		&& !(tcm_info->fps_report_rate_num % 2)) {
@@ -8211,27 +8108,6 @@ static void init_chip_dts(struct device *dev, void *chip_data)
 		tcm_info->fps_report_rate_array[5] = 2;
 		TP_INFO(tcm_info->tp_index, "fps_report_rate is not dubole %d\n", tcm_info->fps_report_rate_num);
 	}
-
-	if (tcm_info->game_report_rate_num > 0 && tcm_info->game_report_rate_num <= GAME_REPORT_NUM) {
-                rc = of_property_read_u32_array(chip_np, "game_report_rate", temp_array, tcm_info->game_report_rate_num);
-                if (rc) {
-                        TP_INFO(tcm_info->tp_index, "game_report_rate not specified %d\n", rc);
-                } else {
-                        for (i = 0; i < tcm_info->game_report_rate_num; i++) {
-                                tcm_info->game_report_rate_array[i] = temp_array[i];
-                                TP_INFO(tcm_info->tp_index, "game_report_rate is: %d\n", tcm_info->game_report_rate_array[i]);
-                        }
-                }
-        } else {
-		tcm_info->game_report_rate_num = GAME_REPORT_NUM;
-                tcm_info->game_report_rate_array[0] = SYNA_120HZ_REPORT_RATE;
-                tcm_info->game_report_rate_array[1] = SYNA_240HZ_REPORT_RATE;
-                tcm_info->game_report_rate_array[2] = SYNA_360HZ_REPORT_RATE;
-                tcm_info->game_report_rate_array[3] = SYNA_720HZ_REPORT_RATE;
-		tcm_info->game_report_rate_array[4] = SYNA_180HZ_REPORT_RATE;
-                TP_INFO(tcm_info->tp_index, "game_report_rate is not dubole %d\n", tcm_info->game_report_rate_num);
-        }
-
 	rc = of_property_read_u32(chip_np, "fwupdate_bootloader", &tcm_info->fwupdate_bootloader);
 	if (rc < 0) {
 		tcm_info->fwupdate_bootloader = 0;
@@ -8313,6 +8189,10 @@ static int syna_tcm_probe(struct spi_device *spi)
 	ts->chip_data = tcm_info;
 	ts->s_client->chip_select = 0; /*modify reg=0 for more tp vendor share same spi interface*/
 	spi_set_drvdata(spi, ts);
+	/* add input_dev info */
+	ts->id.bustype = BUS_SPI;
+	ts->id.vendor = SYNAPTICS;
+	ts->id.product = S3910;
 
 	ts->ts_ops = &syna_tcm_ops;
 	ts->engineer_ops = &syna_tcm_engineer_test_ops;
@@ -8337,30 +8217,6 @@ static int syna_tcm_probe(struct spi_device *spi)
 	tcm_info->first_sync_flag = true;
 	tcm_info->snr = ts->snr;
 	tcm_info->palm_hold_report = 0;
-
-	/* tp_index*/
-	retval = of_property_read_u32(ts->dev->of_node, "touchpanel,tp-index", &ts->tp_index);
-
-	if (retval) {
-		TPD_BOOT_INFO("ts->tp_index not specified\n");
-		ts->tp_index = 0;
-	} else {
-		if (ts->tp_index >= TP_SUPPORT_MAX) {
-			TP_INFO(ts->tp_index, "ts->tp_index is big than %d\n", TP_SUPPORT_MAX);
-			ts->tp_index = 0;
-		}
-	}
-	TPD_INFO("ts->tp_index is %d\n", ts->tp_index);
-
-	/* add input_dev info */
-	ts->id.bustype = BUS_SPI;
-	ts->id.vendor = SYNAPTICS;
-
-	if (!ts->tp_index) {
-		ts->id.product = S3910;
-	} else {
-		ts->id.product = S3910_SECOND;
-	}
 
 	atomic_set(&tcm_info->command_status, CMD_IDLE);
 	mutex_init(&tcm_info->reset_mutex);

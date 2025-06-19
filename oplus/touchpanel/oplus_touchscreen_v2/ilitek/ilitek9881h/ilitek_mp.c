@@ -2207,7 +2207,7 @@ static int ili9881_auto_test_preoperation(struct seq_file *s,
 	struct ilitek_tddi_dev *chip_info = (struct ilitek_tddi_dev *)chip_data;
 
 	TPD_INFO("s->size = %d  s->count = %d\n", (int)s->size, (int)s->count);
-	chip_info->mp_result_count = -1;
+	chip_info->mp_result_count = 0;
 	ilitek_tddi_mp_test_handler(apk_ret, s, NULL, 0, ON, chip_info, testdata);
 	TPD_INFO("chip_info->mp_result_count = %d\n", chip_info->mp_result_count);
 
@@ -2220,7 +2220,7 @@ static int ili9881_black_screen_preoperation(char *msg, int msg_size,
 	char apk_ret[100] = {0};
 	struct ilitek_tddi_dev *chip_info = (struct ilitek_tddi_dev *)chip_data;
 
-	chip_info->mp_result_count = -1;
+	chip_info->mp_result_count = 0;
 	ilitek_tddi_mp_test_handler(apk_ret, NULL, msg, msg_size, OFF, chip_info,
 				    testdata);
 	TPD_INFO("chip_info->mp_result_count = %d\n", chip_info->mp_result_count);

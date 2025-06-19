@@ -98,12 +98,6 @@
 #define EVENTBUFFER_EXT_PEN_MODE_ON               0x10       /*notify havon pencil connected*/
 #define EVENTBUFFER_EXT_PEN_MODE_OFF              0x11       /*notify pencil disconnected*/
 #define EVENTBUFFER_EXT_PEN_MODE_2ND_ON           0x12       /*notify maxeye pencil connected*/
-#define EVENTBUFFER_EXT_PEN_MODE_3RD_ON           0x13       /*notify maxeye-2ND pencil connected*/
-#define EVENTBUFFER_EXT_PEN_MODE_4TH_ON           0x15       /*notify Xingwangda pencil connected*/
-#define EVENTBUFFER_EXT_PEN_VIBRATOR_ON           0x16
-#define EVENTBUFFER_EXT_PEN_VIBRATOR_OFF          0x17
-#define EVENTBUFFER_EXT_PEN_MODE_5TH_ON           0x18       /* notify maxeye-3RD pencil connected */
-#define PEN_CTL_FEEDBACK                          0xffff
 
 #define NVT_TOUCH_FW_DEBUG_INFO (1)
 #define NVT_DUMP_SRAM   (0)
@@ -296,11 +290,6 @@ struct nvt_ts_trim_id_table {
 	const struct nvt_ts_hw_info *hwinfo;
 };
 
-struct pen_id_map{
-	uint32_t src_id;
-	uint32_t dst_id;
-};
-
 struct nvt_ts_hw_reg_addr_info {
 	uint32_t chip_ver_trim_addr;
 	uint32_t swrst_sif_addr;
@@ -358,12 +347,10 @@ struct chip_data_nt36523 {
 	uint32_t                        chip_ver_trim_addr;
 	uint32_t                        swrst_sif_addr;
 	uint32_t                        crc_err_flag_addr;
-	uint32_t                        pen_ctl_para;
 	struct spi_device               *s_client;
 	struct hw_resource              *hw_res;
 	struct nvt_ts_trim_id_table     trim_id_table;
 	struct nvt_ts_bin_map           *bin_map;
-	struct pen_id_map               *pen_id_map_array;
 	bool                            esd_check_enabled;
 	unsigned long                   irq_timer;
 	uint8_t                         esd_retry;
@@ -379,7 +366,6 @@ struct chip_data_nt36523 {
 	int                             lcd_reset_gpio;
 	struct nvt_fw_debug_info        nvt_fw_debug_info;
 	int irq_num;
-	int pen_id_map_num;
 	struct touchpanel_data *ts;
 	u8 *g_fw_buf;
 	size_t g_fw_len;
@@ -389,7 +375,6 @@ struct chip_data_nt36523 {
 	bool need_judge_irq_throw;
 
 	int tp_index;
-	int log_count;
 	/*add for doze*/
 	u32 doze_mode_set_count;
 	struct mutex doze_mode_lock;

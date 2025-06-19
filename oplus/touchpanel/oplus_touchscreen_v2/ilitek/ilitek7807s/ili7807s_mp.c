@@ -3061,7 +3061,7 @@ static int ili7807_auto_test_preoperation(struct seq_file *s,
 	TPD_INFO("s->size = %d  s->count = %d\n", (int)s->size, (int)s->count);
 	mutex_lock(&chip_info->touch_mutex);
 	enable_irq(ilits->irq_num);/*because oplus disable*/
-	chip_info->mp_result_count = -1;
+	chip_info->mp_result_count = 0;
 	ili_mp_test_handler(NULL, s, NULL, 0, ON, chip_info, testdata);
 	disable_irq_nosync(ilits->irq_num);
 	mutex_unlock(&chip_info->touch_mutex);
@@ -3077,7 +3077,7 @@ static int ili7807_black_screen_preoperation(char *msg, int msg_size,
 	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
 	mutex_lock(&chip_info->touch_mutex);
 	/*enable_irq(ilits->irq_num);  because oplus disable*/
-	chip_info->mp_result_count = -1;
+	chip_info->mp_result_count = 0;
 	ili_mp_test_handler(NULL, NULL, msg, msg_size, OFF, chip_info, testdata);
 	/*disable_irq_nosync(ilits->irq_num);*/
 	mutex_unlock(&chip_info->touch_mutex);

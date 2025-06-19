@@ -882,7 +882,6 @@ static ssize_t ilitek_proc_get_debug_mode_data_read(struct file *filp,
 {
 	int ret;
 	struct file_buffer csv;
-	u8 differ_mode_cmd[4] = {P5_X_MODE_CONTROL, P5_X_FW_RAW_DATA_MODE};
 
 	if (*pos != 0) {
 		return 0;
@@ -943,15 +942,7 @@ static ssize_t ilitek_proc_get_debug_mode_data_read(struct file *filp,
 	}
 
 	/* change to demo mode */
-	if (ilits->differ_mode) {
-		if (ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
-			ILI_ERR("Failed to switch debug mode\n");
-		}
-		if (ilits->wrapper(differ_mode_cmd, 2, NULL, 0, ON, OFF) < 0) {
-			ILI_ERR("switch ilitek diff mode fail\n");
-		}
-	} else {
-		if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0)
+	if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
 		ILI_ERR("Failed to set tp data length\n");
 	}
 
@@ -1408,7 +1399,6 @@ void ili_gesture_fail_reason(bool enable)
 int ili_tp_data_mode_ctrl(u8 *cmd)
 {
 	int ret = 0;
-	u8 differ_mode_cmd[4] = {P5_X_MODE_CONTROL, P5_X_FW_RAW_DATA_MODE};
 
 	switch (cmd[0]) {
 	case AP_MODE:
@@ -1429,21 +1419,10 @@ int ili_tp_data_mode_ctrl(u8 *cmd)
 			} else {
 				if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
 					ILI_ERR("Failed to switch demo mode do reset\n");
-					if (ilits->differ_mode) {
-						if (ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
-							ILI_ERR("Failed to switch debug mode\n");
-						}
-					if (ilits->wrapper(differ_mode_cmd, 2, NULL, 0, ON, OFF) < 0) {
-						ILI_ERR("switch ilitek diff mode fail\n");
-					}
-					} else {
-						if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
-							ILI_ERR("Failed to switch demo mode do reset\n");
-							if (ili_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
-								ILI_ERR("Failed to switch demo mode\n");
-								ret = -ENOTTY;
-							}
-						}
+
+					if (ili_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
+						ILI_ERR("Failed to switch demo mode\n");
+						ret = -ENOTTY;
 					}
 				}
 			}
@@ -1561,14 +1540,6 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff,
 
 	if (strncmp(cmd, "hwreset", strlen(cmd)) == 0) {
 		ili_reset_ctrl(TP_HW_RST_ONLY);
-
-	} else if (strcmp(cmd, "aod") == 0) {
-		if (data[1] == 0) {
-			ili_aod_control(0);
-		}
-		else if (data[1] == 1) {
-			ili_aod_control(1);
-		}
 
 	} else if (strcmp(cmd, "rawdatarecore") == 0) {
 		if (data[1] == ENABLE_RECORD) {
@@ -1904,38 +1875,6 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff,
 	} else if (strncmp(cmd, "position_resolution", strlen(cmd)) == 0) {
 		ilits->position_high_resolution = !ilits->position_high_resolution;
 		ILI_INFO("Position Resolution = %s\n", (ilits->position_high_resolution ? "High" : "Low"));
-	} else if (strncmp(cmd, "glove", strlen(cmd)) == 0) {
-		ili_ic_func_ctrl("glove", data[1]);
-		ILI_INFO("switch glove = %d\n", data[1]);
-	} else if (strncmp(cmd, "differ_mode", strlen(cmd)) == 0) {
-		u8 differ_mode_cmd[4] = {P5_X_MODE_CONTROL, P5_X_FW_RAW_DATA_MODE};
-		if ((ilits->rib.nReportResolutionMode == POSITION_DIFFER_HIGH_RESOLUTION)
-			|| (ilits->rib.nReportResolutionMode == POSITION_DIFFER_LOW_RESOLUTION)) {
-			if (data[1]) {
-				ret = ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL);
-				if (ret < 0) {
-					ILI_ERR("Failed to switch debug mode\n");
-				}
-				ILI_INFO("debug cmd 0x%X, 0x%X\n", differ_mode_cmd[0], differ_mode_cmd[1]);
-				ret = ilits->wrapper(differ_mode_cmd, 2, NULL, 0, ON, OFF);
-				if (ret < 0) {
-					ILI_ERR("switch ilitek diff mode fail\n");
-				}
-				ilits->differ_mode = true;
-				ILI_INFO("open ilitek diff\n");
-			} else {
-				ret = ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL);
-				if (ret < 0) {
-					ILI_ERR("Failed to set tp data length\n");
-					ILI_ERR("close ilitek diff fail\n");
-				}
-				ilits->differ_mode = false;
-				ILI_INFO("close ilitek diff\n");
-			}
-			ILI_INFO("differ_mode %s\n", (data[1] ? "open" : "close"));
-		} else {
-			ILI_INFO("new firmware not support differ_mode\n");
-		}
 	}  else {
 		ILI_ERR("Unknown command\n");
 		size = -1;

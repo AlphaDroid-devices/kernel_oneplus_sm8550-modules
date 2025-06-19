@@ -819,6 +819,8 @@ static int32_t nvt_ts_check_chip_ver_trim_loop(struct chip_data_nt36523 *chip_in
 	ret = nvt_ts_check_chip_ver_trim(chip_info, hw_regs_table[i]);
 		if (!ret) {
 			break;
+		} else {
+			ret = 0;
 		}
 	}
 
@@ -2087,7 +2089,6 @@ static int nvt_get_touch_points_high_reso(void *chip_data, struct point_info *po
 	uint32_t input_p = 0;
 	uint8_t pointid = 0;
 	uint8_t *point_data = chip_info->point_data;
-	bool is_finger_hold = false;
 	/*uint32_t tmp_data = 0;
 	struct resolution_info *res_info = &chip_info->ts->resolution_info;*/
 
@@ -2144,13 +2145,7 @@ static int nvt_get_touch_points_high_reso(void *chip_data, struct point_info *po
 			points[pointid].width_major = input_w;
 			points[pointid].touch_major = input_w;
 			points[pointid].status = 1;
-		} else if ((point_data[position] & 0x07) == STATUS_FINGER_HOLD) {
-			is_finger_hold = true;
 		}
-	}
-	/*no valid point and finger hold state, we should report cancel */
-	if ((0 == obj_attention) && is_finger_hold && chip_info->ts) {
-		chip_info->ts->pen_mode_tp_state = CANCLE_TP;
 	}
 
 #ifdef CONFIG_OPLUS_TP_APK
@@ -2319,15 +2314,12 @@ static int8_t nvt_extend_cmd_store(struct chip_data_nt36523 *chip_info,
 		TPD_INFO("send Cmd 0x%02X 0x%02X failed, buf[1]=0x%02X\n", u8Cmd, u8SubCmd,
 			 buf[1]);
 		return -1;
+
 	} else {
-		if (u8SubCmd == 0x16 || u8SubCmd == 0x17) {
-			TPD_SPECIFIC_PRINT(chip_info->log_count,
-			 "send Cmd 0x%02X 0x%02X success, tried %d times\n", u8Cmd, u8SubCmd, i);
-		} else {
-			TPD_INFO("send Cmd 0x%02X 0x%02X success, tried %d times\n", u8Cmd, u8SubCmd,
+		TPD_INFO("send Cmd 0x%02X 0x%02X success, tried %d times\n", u8Cmd, u8SubCmd,
 			 i);
-		}
 	}
+
 	return 0;
 }
 
@@ -2918,6 +2910,7 @@ static int nvt_enable_game_mode(struct chip_data_nt36523 *chip_info,
 
 	if (enable) {
 		ret = nvt_cmd_store(chip_info, EVENTBUFFER_GAME_ON);
+
 	} else {
 		ret = nvt_cmd_store(chip_info, EVENTBUFFER_GAME_OFF);
 	}
@@ -2946,7 +2939,6 @@ static int nvt_enable_headset_mode(struct chip_data_nt36523 *chip_info,
 
 static void nvt_notify_pencil_type(void *chip_data, uint8_t value)
 {
-	int i;
 	struct chip_data_nt36523 *chip_info = (struct chip_data_nt36523 *)chip_data;
 
 	if (!chip_info) {
@@ -2954,92 +2946,29 @@ static void nvt_notify_pencil_type(void *chip_data, uint8_t value)
 	}
 
 	chip_info->current_pencil_type = value;
-
-	if (chip_info->pen_id_map_num) {
-		for (i = 0; i < chip_info->pen_id_map_num; i++) {
-			if (chip_info->pen_id_map_array[i].src_id == value) {
-				chip_info->current_pencil_type = chip_info->pen_id_map_array[i].dst_id;
-				break;
-			}
-		}
-	}
-
-	TPD_INFO("value = %d, set pencil type to %d.\n", value, chip_info->current_pencil_type);
+	TPD_INFO("set pencil type to %d.\n", chip_info->current_pencil_type);
 
 	return;
 }
 
-static int nvt_enable_pen_mode(struct chip_data_nt36523 *chip_info, bool enable)
+static int nvt_enable_pen_mode(struct chip_data_nt36523 *chip_info,
+				bool enable)
 {
 	int8_t ret = -1;
 
 	if (enable) {
-		switch (chip_info->current_pencil_type) {
-		case TYPE_PENCIL_HAVON:
+		if (TYPE_PENCIL_HAVON == chip_info->current_pencil_type) {
 			ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_MODE_ON);
-			break;
-		case TYPE_PENCIL_MAXEYE:
+		} else if (TYPE_PENCIL_MAXEYE == chip_info->current_pencil_type) {
 			ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_MODE_2ND_ON);
-			break;
-		case TYPE_PENCIL_MAXEYE_2ND:
-			ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_MODE_3RD_ON);
-			break;
-		case TYPE_PENCIL_SUNWODA:
-			ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_MODE_4TH_ON);
-			break;
-		case TYPE_PENCIL_MAXEYE_3RD:
-			ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_MODE_5TH_ON);
-			break;
-		default:
-			ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_MODE_ON);
-			TPD_INFO("error pencil type not defined !!!\n");
-			break;
+		} else {
+			TPD_INFO("error for pencil type not defined!!!\n");
 		}
 	} else {
 		ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_MODE_OFF);
 	}
 
 	return ret;
-}
-
-static int nvt_enable_pen_vibrator(struct chip_data_nt36523 *chip_info, int ctl_cmd)
-{
-	int8_t ret = 0;
-
-
-	chip_info->pen_ctl_para = ctl_cmd;
-
-	if(ctl_cmd == 3) {
-		ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_VIBRATOR_ON);
-	} else if (ctl_cmd == 2) {
-		ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_PEN_VIBRATOR_OFF);
-	} else {
-		TPD_INFO("%s invaled cmd!!\n", __func__);
-	}
-
-	return ret;
-}
-
-static int nvt_pen_control(struct chip_data_nt36523 *chip_info, int ctl_cmd)
-{
-	if(ctl_cmd == PEN_CTL_FEEDBACK) {
-		TPD_INFO("%s flag is feedback, return now control para\n", __func__);
-		goto REPORT;
-	}
-
-	if(!ctl_cmd) {
-		TPD_INFO("%s invaled data!!\n", __func__);
-		goto ERR;
-	}
-
-	if(nvt_enable_pen_vibrator(chip_info, ctl_cmd)) {
-		goto ERR;
-	}
-
-REPORT:
-		return chip_info->pen_ctl_para;
-ERR:
-		return -1;
 }
 
 #ifdef CONFIG_OPLUS_TP_APK
@@ -3101,33 +3030,30 @@ static __maybe_unused int nvt_enable_debug_msg_diff_mode(struct chip_data_nt3652
 
 	return ret;
 }
-#endif /* end of CONFIG_OPLUS_TP_APK*/
 
-static int nvt_enable_water_polling_mode(struct chip_data_nt36523 *chip_info, bool enable)
+static __maybe_unused int nvt_enable_water_polling_mode(struct chip_data_nt36523 *chip_info, bool enable)
 {
 	int8_t ret = -1;
 
 	TPD_INFO("%s:enable = %d, chip_info->is_sleep_writed = %d\n", __func__,
 		 enable, chip_info->is_sleep_writed);
 
+
 	nvt_esd_check_update_timer(chip_info);
+
 
 	if (enable) {
 		ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD,
 					   EVENTBUFFER_EXT_DBG_WATER_POLLING_ON);
-		if (!ret) {
-			TPD_INFO("%s: send EVENTBUFFER_EXT_DBG_WATER_POLLING_ON\n", __func__);
-		}
+
 	} else {
 		ret = nvt_extend_cmd_store(chip_info, EVENTBUFFER_EXT_CMD,
 					   EVENTBUFFER_EXT_DBG_WATER_POLLING_OFF);
-		if (!ret) {
-			TPD_INFO("%s: send EVENTBUFFER_EXT_DBG_WATER_POLLING_OFF\n", __func__);
-		}
 	}
 
 	return ret;
 }
+#endif /* end of CONFIG_OPLUS_TP_APK*/
 
 static int nvt_mode_switch(void *chip_data, work_mode mode, int flag)
 {
@@ -3205,25 +3131,7 @@ static int nvt_mode_switch(void *chip_data, work_mode mode, int flag)
 		ret = nvt_enable_pen_mode(chip_info, flag);
 
 		if (ret < 0) {
-			TPD_INFO("%s: enable pen mode : %d failed\n", __func__, flag);
-		}
-
-		break;
-
-	case MODE_PEN_CTL:
-		ret = nvt_pen_control(chip_info, flag);
-
-		if (ret < 0) {
-			TPD_INFO("%s: enable pencil control: %d failed\n", __func__, flag);
-		}
-
-		break;
-
-	case MODE_WATERPROOF:
-		ret = nvt_enable_water_polling_mode(chip_info, flag);
-
-		if (ret < 0) {
-			TPD_INFO("%s: enable water_polling_mode: %d failed\n", __func__, flag);
+			TPD_INFO("%s: enable headset mode : %d failed\n", __func__, flag);
 		}
 
 		break;
@@ -8595,8 +8503,6 @@ static struct engineer_test_operations nvt_engineer_test_ops = {
 static void nvt_prase_dts(struct device *dev, void *chip_data)
 {
 	int rc;
-	int i;
-	int length;
 	struct device_node *np;
 
 	struct chip_data_nt36523 *chip_info = (struct chip_data_nt36523 *)chip_data;
@@ -8607,43 +8513,13 @@ static void nvt_prase_dts(struct device *dev, void *chip_data)
 		TPD_INFO("chip_info->doze_x_num not specified\n");
 		chip_info->doze_x_num = 0;
 	}
-
-	rc = of_property_read_u32(np, "touchpanel,doze-rx-num", &chip_info->doze_y_num);
-	if (rc < 0) {
-		TPD_INFO("chip_info->doze_y_num not specified\n");
-		chip_info->doze_y_num = 0;
-	}
+        rc = of_property_read_u32(np, "touchpanel,doze-rx-num", &chip_info->doze_y_num);
+        if (rc < 0) {
+                TPD_INFO("chip_info->doze_y_num not specified\n");
+                chip_info->doze_y_num = 0;
+        }
 
 	TPD_INFO("chip_info->doze_x_num = %d,chip_info->doze_y_num = %d\n", chip_info->doze_x_num, chip_info->doze_y_num);
-
-	rc = of_property_count_u32_elems(np, "touchpanel,pen-id-map");
-	if (rc < 0) {
-		TPD_INFO("chip_info->pen_id_map not specified\n");
-		rc = 0;
-	}
-	length = rc;
-	chip_info->pen_id_map_num = 0;
-
-	if (length != 0 && length % 2 == 0) {
-		chip_info->pen_id_map_num = length / 2;
-		chip_info->pen_id_map_array = devm_kzalloc(dev, chip_info->pen_id_map_num * sizeof(struct pen_id_map), GFP_KERNEL);
-
-		if (chip_info->pen_id_map_array) {
-			rc = of_property_read_u32_array(np, "touchpanel,pen-id-map", (uint32_t *)chip_info->pen_id_map_array, length);
-			if (rc < 0) {
-				TPD_INFO("parse touchpanel,pen-id-map failed, rc=%d\n", rc);
-				devm_kfree(dev, chip_info->pen_id_map_array);
-				chip_info->pen_id_map_num = 0;
-			} else {
-				TPD_INFO("pen_id_map num = %d\n", chip_info->pen_id_map_num);
-				for (i = 0; i < chip_info->pen_id_map_num; i++) {
-					TPD_INFO("src_id: %d , dst_id: %d\n", chip_info->pen_id_map_array[i].src_id, chip_info->pen_id_map_array[i].dst_id);
-				}
-			}
-		}
-	} else {
-		TPD_INFO("pen_id_map elements should be multiple of 2. length = %d\n", length);
-	}
 }
 
 static int nvt_tp_probe(struct spi_device *client)
@@ -8814,6 +8690,12 @@ static int nvt_tp_probe(struct spi_device *client)
 	return 0;
 
 err_register_driver:
+#if !IS_MODULE(CONFIG_TOUCHPANEL_OPLUS)
+	 {
+		extern struct touchpanel_data *g_tp[TP_SUPPORT_MAX];
+		g_tp[ts->tp_index] = NULL;
+	}
+#endif
 	common_touch_data_free(ts);
 	ts = NULL;
 
@@ -8838,11 +8720,7 @@ ts_malloc_failed:
 	TPD_INFO("%s, probe error\n", __func__);
 	return ret;
 }
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-static void nvt_tp_remove(struct spi_device *client)
-#else
 static int nvt_tp_remove(struct spi_device *client)
-#endif
 {
 	struct touchpanel_data *ts = spi_get_drvdata(client);
 
@@ -8851,10 +8729,7 @@ static int nvt_tp_remove(struct spi_device *client)
 		unregister_common_touch_device(ts);
 		common_touch_data_free(ts);
 	}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-#else
 	return 0;
-#endif
 }
 
 static int nvt_spi_suspend(struct device *dev)

@@ -1822,48 +1822,18 @@ int ft3518_rst_autotest(struct seq_file *s, void *chip_data,
 
 	enter_work_mode();
 
-	ret = fts_test_read_reg(FTS_REG_REPORT_RATE, &val);
-	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("one: read report_rate error, ret=%d\n", ret);
-		goto test_err;
-	}
-
+	fts_test_read_reg(FTS_REG_REPORT_RATE, &val);
 	val2 = val - 1;
-	ret = fts_test_write_reg(FTS_REG_REPORT_RATE, val2);
-	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("one: set report_rate fail, ret=%d\n", ret);
-		goto test_err;
-	}
-
+	fts_test_write_reg(FTS_REG_REPORT_RATE, val2);
 	ft3518_rstpin_reset((void*)ts_data);
-	ret = fts_test_read_reg(FTS_REG_REPORT_RATE, &val3);
-	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("one: read report_rate error, ret=%d\n", ret);
-		goto test_err;
-	}
-
+	fts_test_read_reg(FTS_REG_REPORT_RATE, &val3);
 	TPD_INFO("one: reset test: val = %d, val3 = %d", val, val3);
 
-	ret = fts_test_read_reg(FTS_REG_REPORT_RATE, &val);
-	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("two: read report_rate error, ret=%d\n", ret);
-		goto test_err;
-	}
-
+	fts_test_read_reg(FTS_REG_REPORT_RATE, &val);
 	val2 = val - 1;
-	ret = fts_test_write_reg(FTS_REG_REPORT_RATE, val2);
-	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("two: set report_rate fail, ret=%d\n", ret);
-		goto test_err;
-	}
-
+	fts_test_write_reg(FTS_REG_REPORT_RATE, val2);
 	ft3518_rstpin_reset((void*)ts_data);
-	ret = fts_test_read_reg(FTS_REG_REPORT_RATE, &val3);
-	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("two: read report_rate error, ret=%d\n", ret);
-		goto test_err;
-	}
-
+	fts_test_read_reg(FTS_REG_REPORT_RATE, &val3);
 	TPD_INFO("two: reset test: val = %d, val3 = %d", val, val3);
 
 	if (val3 != val) {
@@ -1871,7 +1841,6 @@ int ft3518_rst_autotest(struct seq_file *s, void *chip_data,
 		ret = -1;
 	}
 
-test_err:
 	if (!ret) {
 		FTS_TEST_SAVE_INFO("------Reset Test PASS\n");
 	} else {

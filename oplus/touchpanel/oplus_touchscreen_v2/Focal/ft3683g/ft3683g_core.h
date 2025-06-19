@@ -37,7 +37,6 @@
 #define FTS_REG_STABLE_DISTANCE_AFTER_N         0xB9
 #define FTS_REG_STABLE_DISTANCE                 0xBA
 #define FTS_REG_HEADSET_MODE_EN                 0xC4
-#define FTS_REG_SMART_TOUCH_MODE_EN             0xC5
 #define FTS_REG_FOD_EN                          0xCF
 #define FTS_REG_FOD_INFO                        0xE1
 #define FTS_REG_FOD_INFO_LEN                    9
@@ -59,7 +58,7 @@
 #define FTS_REG_GESTURE_CONFIG4                 0xD6
 #define FTS_REG_GESTURE_CONFIG5                 0xD7
 #define FTS_REG_GESTURE_CONFIG6                 0xD8
-#define FTS_REG_PULSE_CONTROL                   0xB6
+
 #define FTS_REG_WORK_MODE                       0x9E
 #define FTS_REG_WORK_MODE_SNR_MODE              0x81
 #define FTS_REG_WORK_MODE_FINAL_DIFF_MODE       0x01
@@ -172,17 +171,6 @@
 
 #define SC_NUM_MAX                              256
 
-#define GET_LEN_BY_WIDTH_MAJOR(width_major, len)\
-({\
-	if (width_major > 10 && width_major < 14)\
-		*len = 5;\
-	if (width_major > 12 && width_major < 16)\
-		*len = 5;\
-	if (width_major > 16 && width_major < 20)\
-		*len = 7;\
-	if (width_major > 18 && width_major < 22)\
-		*len = 7;\
-})
 
 #define FACTORY_REG_PARAM_UPDATE_STATE_TOUCH    0xB5
 
@@ -213,17 +201,6 @@
 #define FTS_240HZ_GAME_MODE                     0x01
 #define FTS_360HZ_GAME_MODE                     0x02
 #define FTS_720HZ_GAME_MODE                     0x03
-#define INTELLIGENT_GAME_MODE                   11
-#define EXTREME_GAME_MODE                       12
-
-enum _FTS_RST_REASON {
-	FTS_RST_REASON_UNKNOWN  = 0,
-	FTS_RST_REASON_FWUPDATE = 0x01,
-	FTS_RST_REASON_WDT      = 0x02,
-	FTS_RST_REASON_EXTERNAL = 0x04,
-	FTS_RST_REASON_PWR      = 0x08,
-};
-
 
 enum _FTS_TOUCH_ETYPE {
 	TOUCH_DEFAULT = 0x00,
@@ -237,12 +214,6 @@ enum _FTS_TOUCH_ETYPE {
 	TOUCH_ERROR = 0xFF,
 };
 
-enum SMART_MODE{
-	SMART_DEFAULT_MODE = 0,
-	SMART_FILM_MODE = 1,
-	SMART_WATERPROOF_MODE = 2,
-	SMART_FILM_WATERPROOF_MODE = 3,
-};
 
 struct fts_autotest_offset {
 	int32_t *fts_raw_data_P;
@@ -381,7 +352,6 @@ struct chip_data_ft3683g {
 	struct monitor_data *monitor_data;
 	struct delayed_work prc_work;
 	struct workqueue_struct *ts_workqueue;
-	struct resolution_info *resolution_info;
 	wait_queue_head_t ts_waitqueue;
 	unsigned long intr_jiffies;
 	bool high_resolution_support;
@@ -397,8 +367,6 @@ struct chip_data_ft3683g {
 	bool charger_connected;
 	fod_trigger_type fod_trigger;
 	bool water_mode;
-	int extreme_game_report_rate;
-	bool extreme_game_flag;
 };
 
 
