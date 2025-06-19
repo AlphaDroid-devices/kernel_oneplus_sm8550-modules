@@ -44,13 +44,8 @@
 #include "syna_tcm2_platform.h"
 #include "tcm/synaptics_touchcom_core_dev.h"
 #include "tcm/synaptics_touchcom_func_touch.h"
-#ifdef BUILD_BY_BAZEL
 #include "tp_devices.h"
 #include "touchpanel_common.h"
-#else
-#include "../oplus_touchscreen_v2/tp_devices.h"
-#include "../oplus_touchscreen_v2/touchpanel_common.h"
-#endif
 
 
 #define PLATFORM_DRIVER_NAME "synaptics_tcm_hbp"
@@ -86,16 +81,7 @@
 #define TX_NUM 17
 #define RX_NUM 38
 
-#define IRQ_COST_TIME_OVER_5MS 5000
-#define IRQ_COST_TIME_OVER_10MS 10000
-#define IRQ_COST_TIME_OVER_20MS 20000
-#define IRQ_COST_TIME_OVER_50MS 50000
-
 #define FW_UPDATE_COMPLETE_TIMEOUT  msecs_to_jiffies(40*1000)
-
-#define GESTURE_MODE_SWITCH_RETRY_TIMES     5
-#define MAX_HEALTH_REPORT_LEN 50
-
 /**
  * @section: Driver Configurations
  *
@@ -297,15 +283,6 @@ typedef enum debug_level {
 	LEVEL_DEBUG,    /printk all tp debug info/
 } tp_debug_level;
 */
-
-enum fingerprint_err_type {
-	FOD_ENABLE_NO_ERROR = 0,
-	/* reserved 1-6 */
-	FINGERPRINT_AREA_NOT_MATCH = 7,
-	ANOTHER_FINGER_ON_NON_FP_ZONE = 8,
-	FINGERPRINT_DOWN_BEFORE_FP_ENABLE = 9,
-};
-
 /**
  * @brief: Power States
  *
@@ -688,10 +665,6 @@ struct syna_tcm {
 	int daemon_state;
 	int primary_timestamp_enabled;
 	int driver_current_state;
-	bool differ_read_every_frame;
-	bool tp_data_record_support;
-	bool enter_force_doze;
-	int boot_mode;                                      /*boot up mode */
 
 	unsigned int waiting_frame;
 	unsigned int wait_for_ioctl_operation;
@@ -705,8 +678,6 @@ struct syna_tcm {
 	unsigned short touch_and_hold;
 	bool is_fp_down;
 	struct fp_underscreen_info fp_info;	/*tp info used for underscreen fingerprint*/
-	bool fp_active;	/*prepare for screen off fingerprint earlier*/
-	bool fp_prevent;	/*sensor near and fp closed, exit active state and enter sleep*/
 
 	/* framebuffer callbacks notifier */
 #if IS_ENABLED(CONFIG_DRM_OPLUS_PANEL_NOTIFY)
@@ -734,12 +705,6 @@ struct syna_tcm {
 	struct com_test_data com_test_data;	/*test comon data*/
 	struct tcm_engineer_test_operations   *engineer_ops;     /*call_back function*/
 	bool in_test_process;
-
-	bool health_monitor_support;                        /*health_monitor is used*/
-	struct monitor_data    monitor_data;                /*health monitor data*/
-
-	bool exception_upload_support;
-	struct exception_data    exception_data;            /*exception_data monitor data*/
 
 	/* fifo to pass the data to userspace */
 	unsigned int fifo_remaining_frame;

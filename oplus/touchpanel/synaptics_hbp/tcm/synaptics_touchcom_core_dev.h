@@ -359,7 +359,6 @@ enum tcm_report_type {
 	/* custom report */
 	REPORT_LOG = 0x9f,
 	REPORT_POWER_STATE_INFO = 0xFE,
-	REPORT_DIFF  = 0xaa,
 };
 
 /**
@@ -770,8 +769,6 @@ struct tcm_dev {
 	 * defined in syna_touchcom_platform.h
 	 */
 	struct syna_hw_interface *hw_if;
-
-	struct monitor_data *monitor_data; /*health monitor data*/
 	unsigned int firmware_mode_count;
 	unsigned int upload_flag;
 	unsigned int error_state_count;

@@ -3,8 +3,7 @@
 #
 
 # Each configuration option enables a list of files.
-subdir-ccflags-$(CONFIG_TOUCHPANEL_MTK_PLATFORM) += -I$(srctree)/drivers/misc/mediatek/include/
-subdir-ccflags-$(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY) += -I$(srctree)/drivers/misc/mediatek/include/
+
 
 
 TCM_CORE=tcm/
@@ -28,7 +27,8 @@ synaptics_tcm2-y += synaptics_common.o
 synaptics_tcm2-y += touchpanel_proc.o
 synaptics_tcm2-y += touch_comon_api/touch_comon_api.o
 synaptics_tcm2-y += touchpanel_autotest/touchpanel_autotest.o
-synaptics_tcm2-y += touchpanel_healthinfo/touchpanel_healthinfo.o
-synaptics_tcm2-y += touchpanel_healthinfo/touchpanel_exception.o
 
 obj-$(CONFIG_TOUCHSCREEN_SYNA_TCM2) += synaptics_tcm2.o
+
+#oplus_bsp_tp_notify-y += ../touchpanel_notify/touchpanel_event_notify.o
+#obj-$(CONFIG_TOUCHPANEL_NOTIFY) += oplus_bsp_tp_notify.o

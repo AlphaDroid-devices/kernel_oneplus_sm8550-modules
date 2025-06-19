@@ -1340,8 +1340,7 @@ static int syna_spi_probe(struct spi_device *spi)
 	spi->bits_per_word = 8;
 
 	/* set up spi driver */
-#if IS_ENABLED (CONFIG_TOUCHPANEL_MTK_PLATFORM) &&  (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-
+#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
 	spi->controller_data = (void *)&st_spi_ctrdata;
 #else
 	retval = spi_setup(spi);
