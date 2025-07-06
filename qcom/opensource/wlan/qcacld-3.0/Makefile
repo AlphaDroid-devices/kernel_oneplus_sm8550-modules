@@ -12,7 +12,7 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 M ?= $(shell pwd)
 
 ifeq ($(WLAN_ROOT),)
-ifeq ($(TARGET_BOARD_PLATFORM),crow)
+ifneq ($(shell grep -w "^CONFIG_ARCH_CROW=y" $(OUT_DIR)/../KERNEL_OBJ/.config),)
 KBUILD_OPTIONS += \
     WLAN_ROOT=$(KERNEL_SRC)/$(M) \
     WLAN_PLATFORM_ROOT=$(KERNEL_SRC)/$(M)/../platform \
